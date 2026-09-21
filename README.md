@@ -1,6 +1,16 @@
-# 波妞摸鱼
+# 波妞摸鱼：Windows 抖音摸鱼小窗口
 
-波妞摸鱼是轻量 WebView2 原生 Windows 小窗程序。最终交付为单个 EXE；首次运行会把程序组件解压到 `%LOCALAPPDATA%\MiniViewWebView2\App\1.7.0-x64`，以后直接复用。保留原数据目录是为了继承已有登录状态和设置。抖音网页由系统 WebView2 Runtime 渲染，不再携带完整 Chromium/Electron。
+波妞摸鱼是一款开源、轻量的 Windows 抖音桌面小窗工具。它基于 Microsoft Edge WebView2，支持窗口置顶、老板键快速隐藏、鼠标移出自动隐藏、清爽模式、直播横屏、登录状态保存，以及 x64 / x86 Windows。
+
+项目适合需要“抖音摸鱼小窗口”“Windows 抖音悬浮窗”“抖音老板键”或轻量抖音桌面客户端的用户。程序最终交付为单个 EXE；首次运行会把组件解压到 `%LOCALAPPDATA%\MiniViewWebView2\App\1.7.0-<架构>`，以后直接复用。抖音网页由系统 WebView2 Runtime 渲染，不携带完整 Chromium/Electron。
+
+## 下载
+
+- [GitHub Releases 下载页面](https://github.com/LawmanMuhei/boniu/releases/latest)
+- 64 位 Windows：`BoniuMoyu.exe`
+- 32 位 Windows：`BoniuMoyu-x86.exe`
+
+每个 EXE 都提供配套 `.sha256` 文件，可用于校验下载完整性。程序暂未配置商业代码签名证书，因此 Windows 可能显示“未知发布者”。
 
 ## 功能
 
@@ -49,3 +59,7 @@
 ## 隐私边界
 
 该程序只让窗口从桌面和任务栏中消失，不能对系统管理员、任务管理器、远程管理、屏幕录制或进程审计隐藏。
+
+## 开源许可
+
+本项目采用 [MIT License](LICENSE) 开源。抖音及其商标、网页内容与服务归相应权利人所有，本项目与抖音官方无关联。
