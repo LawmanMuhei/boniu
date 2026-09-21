@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">波妞摸鱼应用图标</title>
+  <desc id="desc">深色视频小窗中，一条珊瑚红小鱼带着青绿色尾巴和播放符号。</desc>
+
+  <rect x="72" y="72" width="880" height="880" rx="208" fill="#202226"/>
+
+  <path
+    d="M718 417 C775 369 833 344 886 330 C876 398 854 458 818 512 C854 566 876 626 886 694 C833 680 775 655 718 607 Z"
+    fill="#39C9B5"/>
+
+  <path
+    d="M166 512 C213 386 338 310 494 310 C633 310 736 377 782 512 C736 647 633 714 494 714 C338 714 213 638 166 512 Z"
+    fill="#FF615A"/>
+
+  <circle cx="336" cy="451" r="31" fill="#FFF8EC"/>
+  <circle cx="336" cy="451" r="13" fill="#202226"/>
+
+  <path d="M466 424 L466 600 L620 512 Z" fill="#FFF8EC"/>
+
+  <path
+    d="M183 325 C183 269 228 224 284 224 H694"
+    fill="none"
+    stroke="#FFF8EC"
+    stroke-width="34"
+    stroke-linecap="round"/>
+  <circle cx="759" cy="224" r="17" fill="#39C9B5"/>
+</svg>

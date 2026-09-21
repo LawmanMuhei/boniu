@@ -1,0 +1,9 @@
+.packages/
+build/
+dist/
+.vs/
+*.user
+*.suo
+*.nupkg
+*.log
+assets/*-check.png

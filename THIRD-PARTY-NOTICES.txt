@@ -1,0 +1,7 @@
+波妞摸鱼 uses Microsoft Edge WebView2 SDK binaries.
+
+Microsoft.Web.WebView2 package version: 1.0.4191.47
+Package license: see the LICENSE.txt distributed inside the NuGet package.
+Package source: https://www.nuget.org/packages/Microsoft.Web.WebView2/
+
+The Microsoft Edge WebView2 Runtime is installed and serviced separately by Microsoft.
