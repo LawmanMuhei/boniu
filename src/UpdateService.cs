@@ -32,7 +32,7 @@ namespace MiniView.WebView2App
     internal sealed class UpdateService
     {
         private const string LatestReleaseApi = "https://api.github.com/repos/LawmanMuhei/boniu/releases/latest";
-        private const string ExecutableAssetName = "波妞摸鱼.exe";
+        private const string ExecutableAssetName = "BoniuMoyu.exe";
         private const long MaximumExecutableBytes = 50L * 1024L * 1024L;
         private readonly string appFolder;
         private readonly string launcherPath;
@@ -94,7 +94,7 @@ namespace MiniView.WebView2App
         internal async Task<PreparedUpdate> DownloadAsync(UpdateInfo info)
         {
             if (info == null || string.IsNullOrEmpty(info.AssetUrl) || string.IsNullOrEmpty(info.HashUrl))
-                throw new InvalidOperationException("此版本缺少波妞摸鱼.exe 或 SHA-256 校验文件，已取消更新。");
+                throw new InvalidOperationException("此版本缺少 BoniuMoyu.exe 或 SHA-256 校验文件，已取消更新。");
             EnsureHttps(info.AssetUrl);
             EnsureHttps(info.HashUrl);
 

@@ -8,8 +8,10 @@
 
 每个正式 Release 必须同时包含：
 
-- `波妞摸鱼.exe`
-- `波妞摸鱼.exe.sha256`
+- `BoniuMoyu.exe`
+- `BoniuMoyu.exe.sha256`
+
+发布资产使用 ASCII 文件名，避免 GitHub 上传接口清理中文文件名；客户端下载后仍会替换用户原来的“波妞摸鱼.exe”。
 
 首次发布前需要先向空仓库推送至少一个 commit，并执行 `gh auth login`。之后运行 `scripts/publish.ps1` 即可创建标签和 Release。
 

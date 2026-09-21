@@ -14,10 +14,12 @@ if ($assemblyInfo -notmatch [regex]::Escape("AssemblyVersion(`"$Version.0`")")) 
 }
 
 & (Join-Path $PSScriptRoot 'build.ps1')
-$executable = Join-Path $projectRoot 'dist\波妞摸鱼.exe'
+$builtExecutable = Join-Path $projectRoot 'dist\波妞摸鱼.exe'
+$executable = Join-Path $projectRoot 'dist\BoniuMoyu.exe'
+Copy-Item -LiteralPath $builtExecutable -Destination $executable -Force
 $hashFile = $executable + '.sha256'
 $hash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
-[IO.File]::WriteAllText($hashFile, "$hash  波妞摸鱼.exe`n", [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($hashFile, "$hash  BoniuMoyu.exe`n", [Text.UTF8Encoding]::new($false))
 
 $gh = Get-Command gh.exe -ErrorAction SilentlyContinue
 if (-not $gh) { throw 'GitHub CLI (gh.exe) was not found. Install it and run gh auth login first.' }

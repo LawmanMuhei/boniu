@@ -41,7 +41,7 @@
 .\scripts\publish.ps1 -Version 1.7.0 -Notes '更新说明'
 ```
 
-发布脚本会生成 `波妞摸鱼.exe.sha256`，并通过 GitHub CLI 上传两个文件；需要提前安装 `gh` 并执行 `gh auth login`。当前没有签名证书，因此 SHA-256 与 GitHub HTTPS 可校验下载完整性，但 Windows 仍可能显示“未知发布者”，直到配置正式代码签名证书。
+发布脚本会复制生成 ASCII 发布资产 `BoniuMoyu.exe` 及 `BoniuMoyu.exe.sha256`，并通过 GitHub CLI 上传两个文件；下载后可以重命名为“波妞摸鱼.exe”。需要提前安装 `gh` 并执行 `gh auth login`。当前没有签名证书，因此 SHA-256 与 GitHub HTTPS 可校验下载完整性，但 Windows 仍可能显示“未知发布者”，直到配置正式代码签名证书。
 
 应用图标源文件位于 `assets\boniu-moyu-icon.svg`，构建时使用包含 16 至 256 像素尺寸的 `assets\boniu-moyu.ico`。
 
