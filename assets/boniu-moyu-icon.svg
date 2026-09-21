@@ -1,27 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
   <title id="title">波妞摸鱼应用图标</title>
-  <desc id="desc">深色视频小窗中，一条珊瑚红小鱼带着青绿色尾巴和播放符号。</desc>
+  <desc id="desc">工作窗口滑过并遮住带沙发的休闲小窗，表示随时隐藏摸鱼内容。</desc>
+  <defs>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8179F2"/>
+      <stop offset="1" stop-color="#6258DF"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#83B5D1"/>
+      <stop offset="1" stop-color="#6697B9"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD166"/>
+      <stop offset="1" stop-color="#F4A629"/>
+    </linearGradient>
+  </defs>
 
-  <rect x="72" y="72" width="880" height="880" rx="208" fill="#202226"/>
+  <!-- Shared dark frame for the two sliding windows. -->
+  <rect x="62" y="268" width="900" height="488" rx="108" fill="#20243A"/>
 
-  <path
-    d="M718 417 C775 369 833 344 886 330 C876 398 854 458 818 512 C854 566 876 626 886 694 C833 680 775 655 718 607 Z"
-    fill="#39C9B5"/>
+  <!-- Rear leisure window. -->
+  <path d="M170 290H343V734H170C120 734 84 697 84 648V376C84 327 120 290 170 290Z" fill="#6C63E8"/>
+  <rect x="643" y="322" width="297" height="412" rx="82" fill="#FFF7E8"/>
 
-  <path
-    d="M166 512 C213 386 338 310 494 310 C633 310 736 377 782 512 C736 647 633 714 494 714 C338 714 213 638 166 512 Z"
-    fill="#FF615A"/>
+  <!-- Minimal lounge sofa inside the rear window. -->
+  <path d="M650 451C650 425 671 404 697 404H791C817 404 838 425 838 451V582H650Z" fill="#FFBE45"/>
+  <path d="M650 565H822C847 565 867 585 867 610V666H650Z" fill="#E99A21"/>
+  <path d="M809 526C809 506 825 490 845 490H865C885 490 901 506 901 526V593H809Z" fill="#6258DF"/>
+  <path d="M838 666H887V698H838ZM650 666H699V698H650Z" fill="#20243A" opacity=".82"/>
 
-  <circle cx="336" cy="451" r="31" fill="#FFF8EC"/>
-  <circle cx="336" cy="451" r="13" fill="#202226"/>
-
-  <path d="M466 424 L466 600 L620 512 Z" fill="#FFF8EC"/>
-
-  <path
-    d="M183 325 C183 269 228 224 284 224 H694"
-    fill="none"
-    stroke="#FFF8EC"
-    stroke-width="34"
-    stroke-linecap="round"/>
-  <circle cx="759" cy="224" r="17" fill="#39C9B5"/>
+  <!-- Front work window sliding over the leisure window. -->
+  <rect x="258" y="236" width="474" height="552" rx="112" fill="#20243A"/>
+  <rect x="282" y="260" width="426" height="504" rx="90" fill="#78A6C8"/>
+  <path d="M708 644V674C708 724 668 764 618 764H372" fill="none" stroke="#8EBBD3" stroke-width="13" stroke-linecap="round" opacity=".46"/>
 </svg>
