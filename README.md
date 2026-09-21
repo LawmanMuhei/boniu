@@ -21,7 +21,7 @@
 
 ## 系统要求
 
-- Windows 10 / Windows 11 64 位。
+- Windows 10 / Windows 11，支持 64 位和 32 位系统。
 - Microsoft Edge WebView2 Runtime。正常更新的 Windows 10/11 和 Microsoft Edge 通常已自带。
 - 不需要安装 Node.js、Electron、Visual Studio 或 .NET SDK。
 
@@ -31,9 +31,10 @@
 
 ```powershell
 .\scripts\build.ps1
+.\scripts\build.ps1 -Platform x86
 ```
 
-脚本使用 Windows 自带的 .NET Framework 4.8 编译器，并在项目内下载 Microsoft WebView2 SDK NuGet 包。输出位于 `dist\波妞摸鱼.exe`。
+脚本使用 Windows 自带的 .NET Framework 4.8 编译器，并在项目内下载 Microsoft WebView2 SDK NuGet 包。64 位输出为 `dist\波妞摸鱼.exe`，32 位输出为 `dist\波妞摸鱼-x86.exe`。两种架构使用各自的 WebView2Loader 和 `%LOCALAPPDATA%\MiniViewWebView2\App\1.7.0-<架构>` 目录。
 
 没有代码签名证书时构建会明确跳过签名。以后取得 PFX 证书后设置 `BONIU_SIGN_PFX` 和 `BONIU_SIGN_PASSWORD`，或设置证书存储指纹 `BONIU_SIGN_THUMBPRINT`，构建脚本会同时签名内层程序与最终 EXE，并使用时间戳服务。发布新版本可运行：
 
@@ -41,7 +42,7 @@
 .\scripts\publish.ps1 -Version 1.7.0 -Notes '更新说明'
 ```
 
-发布脚本会复制生成 ASCII 发布资产 `BoniuMoyu.exe` 及 `BoniuMoyu.exe.sha256`，并通过 GitHub CLI 上传两个文件；下载后可以重命名为“波妞摸鱼.exe”。需要提前安装 `gh` 并执行 `gh auth login`。当前没有签名证书，因此 SHA-256 与 GitHub HTTPS 可校验下载完整性，但 Windows 仍可能显示“未知发布者”，直到配置正式代码签名证书。
+发布脚本会上传 x64 的 `BoniuMoyu.exe`、x86 的 `BoniuMoyu-x86.exe` 及各自的 `.sha256`。自动更新会按当前进程架构选择正确资产。需要提前安装 `gh` 并执行 `gh auth login`。当前没有签名证书，因此 SHA-256 与 GitHub HTTPS 可校验下载完整性，但 Windows 仍可能显示“未知发布者”，直到配置正式代码签名证书。
 
 应用图标源文件位于 `assets\boniu-moyu-icon.svg`，构建时使用包含 16 至 256 像素尺寸的 `assets\boniu-moyu.ico`。
 

@@ -19,9 +19,10 @@ namespace MiniView.Bootstrap
         {
             try
             {
+                string architecture = IntPtr.Size == 4 ? "x86" : "x64";
                 string installRoot = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "MiniViewWebView2", "App", Version + "-x64");
+                    "MiniViewWebView2", "App", Version + "-" + architecture);
                 Directory.CreateDirectory(installRoot);
 
                 Dictionary<string, string> files = new Dictionary<string, string>();

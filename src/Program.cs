@@ -163,6 +163,8 @@ namespace MiniView.WebView2App
             failures += Check(!UpdateService.TryParseVersion("latest", out parsedVersion), "拒绝无效版本标签");
             failures += Check(UpdateService.ExtractSha256("ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789  波妞摸鱼.exe")
                 == "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", "解析 SHA-256 校验文件");
+            failures += Check(UpdateService.GetExecutableAssetName(8) == "BoniuMoyu.exe", "64 位程序选择 x64 更新资产");
+            failures += Check(UpdateService.GetExecutableAssetName(4) == "BoniuMoyu-x86.exe", "32 位程序选择 x86 更新资产");
 
             using (System.Drawing.Drawing2D.GraphicsPath degenerate =
                 UiPaint.RoundedPath(new RectangleF(0.5F, 0.5F, -4F, -3F), 8F))

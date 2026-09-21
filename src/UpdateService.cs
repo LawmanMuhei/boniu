@@ -32,16 +32,17 @@ namespace MiniView.WebView2App
     internal sealed class UpdateService
     {
         private const string LatestReleaseApi = "https://api.github.com/repos/LawmanMuhei/boniu/releases/latest";
-        private const string ExecutableAssetName = "BoniuMoyu.exe";
         private const long MaximumExecutableBytes = 50L * 1024L * 1024L;
         private readonly string appFolder;
         private readonly string launcherPath;
+        private readonly string executableAssetName;
         private readonly HttpClient client;
 
         internal UpdateService(string appFolder)
         {
             this.appFolder = appFolder;
             launcherPath = Environment.GetEnvironmentVariable("BONIU_LAUNCHER_PATH");
+            executableAssetName = GetExecutableAssetName(IntPtr.Size);
             client = new HttpClient();
             client.Timeout = TimeSpan.FromSeconds(20);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("BoniuMoyu/" + CurrentVersion.ToString(3));
@@ -72,9 +73,9 @@ namespace MiniView.WebView2App
                     foreach (GitHubAsset asset in release.assets)
                     {
                         if (asset == null) continue;
-                        if (string.Equals(asset.name, ExecutableAssetName, StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(asset.name, executableAssetName, StringComparison.OrdinalIgnoreCase))
                             executableUrl = asset.browser_download_url;
-                        if (string.Equals(asset.name, ExecutableAssetName + ".sha256", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(asset.name, executableAssetName + ".sha256", StringComparison.OrdinalIgnoreCase))
                             hashUrl = asset.browser_download_url;
                     }
                 }
@@ -94,7 +95,7 @@ namespace MiniView.WebView2App
         internal async Task<PreparedUpdate> DownloadAsync(UpdateInfo info)
         {
             if (info == null || string.IsNullOrEmpty(info.AssetUrl) || string.IsNullOrEmpty(info.HashUrl))
-                throw new InvalidOperationException("此版本缺少 BoniuMoyu.exe 或 SHA-256 校验文件，已取消更新。");
+                throw new InvalidOperationException("此版本缺少 " + executableAssetName + " 或 SHA-256 校验文件，已取消更新。");
             EnsureHttps(info.AssetUrl);
             EnsureHttps(info.HashUrl);
 
@@ -104,7 +105,7 @@ namespace MiniView.WebView2App
 
             string updateFolder = Path.Combine(appFolder, "Updates", info.Version.ToString(3));
             Directory.CreateDirectory(updateFolder);
-            string stagedPath = Path.Combine(updateFolder, ExecutableAssetName);
+            string stagedPath = Path.Combine(updateFolder, executableAssetName);
             string partialPath = stagedPath + ".part";
             if (File.Exists(partialPath)) File.Delete(partialPath);
 
@@ -238,6 +239,11 @@ namespace MiniView.WebView2App
             if (!Version.TryParse(normalized, out parsed) || parsed.Major < 0 || parsed.Minor < 0 || parsed.Build < 0) return false;
             version = new Version(parsed.Major, parsed.Minor, parsed.Build);
             return true;
+        }
+
+        internal static string GetExecutableAssetName(int pointerSize)
+        {
+            return pointerSize == 4 ? "BoniuMoyu-x86.exe" : "BoniuMoyu.exe";
         }
 
         internal static string ExtractSha256(string text)

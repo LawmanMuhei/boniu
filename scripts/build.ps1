@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = 'Release',
+    [ValidateSet('x64', 'x86')]
+    [string]$Platform = 'x64',
     [string]$SignPfxPath = $env:BONIU_SIGN_PFX,
     [string]$SignPfxPassword = $env:BONIU_SIGN_PASSWORD,
     [string]$SignCertificateThumbprint = $env:BONIU_SIGN_THUMBPRINT
@@ -10,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $sourceRoot = Join-Path $projectRoot 'src'
 $buildRoot = Join-Path $projectRoot 'build'
-$payloadRoot = Join-Path $buildRoot 'payload'
+$payloadRoot = Join-Path $buildRoot ("payload-" + $Platform)
 $distRoot = Join-Path $projectRoot 'dist'
 $packageVersion = '1.0.4191.47'
 $packagesRoot = Join-Path $projectRoot '.packages'
@@ -68,12 +70,13 @@ if (Test-Path -LiteralPath $buildRoot) {
 New-Item -ItemType Directory -Force -Path $payloadRoot, $distRoot | Out-Null
 
 $webViewLib = Join-Path $packageRoot 'lib\net462'
-$nativeLoader = Join-Path $packageRoot 'runtimes\win-x64\native\WebView2Loader.dll'
+$nativeLoader = Join-Path $packageRoot ("runtimes\win-" + $Platform + "\native\WebView2Loader.dll")
 $iconFile = Join-Path $projectRoot 'assets\boniu-moyu.ico'
 $appDisplayName = ([char]0x6CE2).ToString() + ([char]0x599E).ToString() + ([char]0x6478).ToString() + ([char]0x9C7C).ToString()
+$architectureSuffix = if ($Platform -eq 'x86') { '-x86' } else { '' }
 $appExecutable = Join-Path $payloadRoot ($appDisplayName + '.exe')
-$testExecutable = Join-Path $buildRoot ($appDisplayName + '.Tests.exe')
-$finalExecutable = Join-Path $distRoot ($appDisplayName + '.exe')
+$testExecutable = Join-Path $buildRoot ($appDisplayName + '.Tests' + $architectureSuffix + '.exe')
+$finalExecutable = Join-Path $distRoot ($appDisplayName + $architectureSuffix + '.exe')
 $references = @(
     (Join-Path $frameworkRoot 'System.dll'),
     (Join-Path $frameworkRoot 'System.Core.dll'),
@@ -97,14 +100,14 @@ $appSources = @(
     (Join-Path $sourceRoot 'Program.cs')
 )
 
-& $compiler /nologo /codepage:65001 /optimize+ /debug- /platform:x64 /target:winexe `
+& $compiler /nologo /codepage:65001 /optimize+ /debug- "/platform:$Platform" /target:winexe `
     "/win32icon:$iconFile" `
     "/win32manifest:$(Join-Path $projectRoot 'app.manifest')" "/out:$appExecutable" `
     $referenceArguments $appSources
 if ($LASTEXITCODE -ne 0) { throw "Application compilation failed with exit code $LASTEXITCODE." }
 Invoke-CodeSign $appExecutable
 
-& $compiler /nologo /codepage:65001 /optimize+ /debug- /platform:x64 /target:exe `
+& $compiler /nologo /codepage:65001 /optimize+ /debug- "/platform:$Platform" /target:exe `
     "/win32manifest:$(Join-Path $projectRoot 'app.manifest')" "/out:$testExecutable" `
     $referenceArguments $appSources
 if ($LASTEXITCODE -ne 0) { throw "Test compilation failed with exit code $LASTEXITCODE." }
@@ -124,7 +127,7 @@ $bootstrapResources = @(
     "/resource:$(Join-Path $payloadRoot 'Microsoft.Web.WebView2.WinForms.dll'),payload.Microsoft.Web.WebView2.WinForms.dll",
     "/resource:$(Join-Path $payloadRoot 'WebView2Loader.dll'),payload.WebView2Loader.dll"
 )
-& $compiler /nologo /codepage:65001 /optimize+ /debug- /platform:x64 /target:winexe `
+& $compiler /nologo /codepage:65001 /optimize+ /debug- "/platform:$Platform" /target:winexe `
     "/win32icon:$iconFile" `
     "/win32manifest:$(Join-Path $projectRoot 'app.manifest')" "/out:$finalExecutable" `
     "/reference:$(Join-Path $frameworkRoot 'System.dll')" `
