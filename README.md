@@ -6,6 +6,9 @@
 
 ## 下载
 
+> [!IMPORTANT]
+> **本程序仅支持 Windows 10 / Windows 11，不支持 Windows 7、Windows 8 或 Windows 8.1。** 请勿在 Windows 7 上下载或运行。
+
 - [GitHub Releases 下载页面](https://github.com/LawmanMuhei/boniu/releases/latest)
 - 64 位 Windows：`BoniuMoyu.exe`
 - 32 位 Windows：`BoniuMoyu-x86.exe`
@@ -32,6 +35,7 @@
 ## 系统要求
 
 - Windows 10 / Windows 11，支持 64 位和 32 位系统。
+- 不支持 Windows 7、Windows 8 或 Windows 8.1，也不提供这些系统的兼容版本。
 - Microsoft Edge WebView2 Runtime。正常更新的 Windows 10/11 和 Microsoft Edge 通常已自带。
 - 不需要安装 Node.js、Electron、Visual Studio 或 .NET SDK。
 
