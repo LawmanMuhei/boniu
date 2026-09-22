@@ -30,6 +30,7 @@ namespace MiniView.WebView2App
         public string HideShortcut { get; set; }
         public string ChromeShortcut { get; set; }
         public bool Muted { get; set; }
+        public bool ShowTrayIcon { get; set; }
         public bool AutoHideEnabled { get; set; }
         public int AutoHideDelayMilliseconds { get; set; }
         public bool HideWhenInactive { get; set; }
@@ -38,6 +39,7 @@ namespace MiniView.WebView2App
         public bool HideRightBar { get; set; }
         public bool ImmersiveMode { get; set; }
         public string ImmersiveShortcut { get; set; }
+        public string MuteShortcut { get; set; }
 
         public AppSettings()
         {
@@ -45,6 +47,7 @@ namespace MiniView.WebView2App
             HideShortcut = "Control+Alt+D";
             ChromeShortcut = "Control+Alt+B";
             ImmersiveShortcut = "Control+Alt+F";
+            MuteShortcut = "Control+Alt+M";
             AutoHideEnabled = true;
             AutoHideDelayMilliseconds = 100;
             HideWhenInactive = false;
@@ -75,8 +78,9 @@ namespace MiniView.WebView2App
                 value.AutoHideDelayMilliseconds = WindowRules.NormalizeAutoHideDelay(value.AutoHideDelayMilliseconds);
                 return value;
             }
-            catch
+            catch (Exception exception)
             {
+                Diagnostics.LogException("SettingsLoad", exception);
                 return new AppSettings();
             }
         }
@@ -86,7 +90,17 @@ namespace MiniView.WebView2App
             string directory = Path.GetDirectoryName(settingsPath);
             if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
             string json = serializer.Serialize(settings);
-            File.WriteAllText(settingsPath, json + Environment.NewLine, new UTF8Encoding(false));
+            string temporary = settingsPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, json + Environment.NewLine, new UTF8Encoding(false));
+                if (File.Exists(settingsPath)) File.Replace(temporary, settingsPath, null);
+                else File.Move(temporary, settingsPath);
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
         }
 
     }
@@ -117,6 +131,9 @@ namespace MiniView.WebView2App
         internal const int HTBOTTOMRIGHT = 17;
         internal const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
         internal const int DWMWCP_ROUND = 2;
+        internal const int WM_CLOSE = 0x0010;
+        internal const uint GW_OWNER = 4;
+        internal delegate bool EnumWindowsCallback(IntPtr windowHandle, IntPtr parameter);
 
         [DllImport("dwmapi.dll")]
         internal static extern int DwmSetWindowAttribute(IntPtr windowHandle, int attribute, ref int attributeValue, int attributeSize);
@@ -142,5 +159,26 @@ namespace MiniView.WebView2App
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool GetWindowRect(IntPtr windowHandle, out NativeRectangle rectangle);
+
+        [DllImport("user32.dll")]
+        internal static extern bool EnumThreadWindows(uint threadId, EnumWindowsCallback callback, IntPtr parameter);
+
+        [DllImport("kernel32.dll")]
+        internal static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetWindow(IntPtr windowHandle, uint command);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool IsWindowVisible(IntPtr windowHandle);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool PostMessage(IntPtr windowHandle, int message, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool EndDialog(IntPtr dialogHandle, IntPtr result);
     }
 }

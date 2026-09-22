@@ -11,7 +11,7 @@ namespace MiniView.Bootstrap
 {
     internal static class Program
     {
-        private const string Version = "1.7.0";
+        private const string Version = MiniView.WebView2App.AppVersion.Current;
         private const string AppExecutableName = "波妞摸鱼.exe";
 
         [STAThread]
@@ -20,9 +20,10 @@ namespace MiniView.Bootstrap
             try
             {
                 string architecture = IntPtr.Size == 4 ? "x86" : "x64";
-                string installRoot = Path.Combine(
+                string appRoot = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "MiniViewWebView2", "App", Version + "-" + architecture);
+                    "MiniViewWebView2", "App");
+                string installRoot = Path.Combine(appRoot, Version + "-" + architecture);
                 Directory.CreateDirectory(installRoot);
 
                 Dictionary<string, string> files = new Dictionary<string, string>();
@@ -34,12 +35,13 @@ namespace MiniView.Bootstrap
 
                 foreach (KeyValuePair<string, string> file in files)
                     ExtractResource(file.Value, Path.Combine(installRoot, file.Key));
+                CleanupOldPayloads(appRoot, installRoot, architecture);
 
                 ProcessStartInfo startInfo = new ProcessStartInfo();
                 startInfo.FileName = Path.Combine(installRoot, AppExecutableName);
                 startInfo.WorkingDirectory = installRoot;
                 startInfo.UseShellExecute = false;
-                startInfo.Arguments = JoinArguments(args);
+                startInfo.Arguments = MiniView.CommandLineArguments.Join(args);
                 startInfo.EnvironmentVariables["BONIU_LAUNCHER_PATH"] = Assembly.GetExecutingAssembly().Location;
                 Process process = Process.Start(startInfo);
                 if (HasArgument(args, "--self-test") || HasArgument(args, "--smoke-test")
@@ -102,21 +104,33 @@ namespace MiniView.Bootstrap
             return true;
         }
 
-        private static string JoinArguments(string[] args)
+        private static void CleanupOldPayloads(string appRoot, string currentPath, string architecture)
         {
-            StringBuilder builder = new StringBuilder();
-            foreach (string argument in args)
+            try
             {
-                if (builder.Length > 0) builder.Append(' ');
-                builder.Append(QuoteArgument(argument));
+                DirectoryInfo root = new DirectoryInfo(appRoot);
+                if (!root.Exists) return;
+                DirectoryInfo[] candidates = Array.FindAll(root.GetDirectories(),
+                    delegate(DirectoryInfo directory)
+                    {
+                        return directory.Name.EndsWith("-" + architecture, StringComparison.OrdinalIgnoreCase);
+                    });
+                Array.Sort(candidates, delegate(DirectoryInfo left, DirectoryInfo right)
+                {
+                    return right.LastWriteTimeUtc.CompareTo(left.LastWriteTimeUtc);
+                });
+                bool keptPrevious = false;
+                foreach (DirectoryInfo candidate in candidates)
+                {
+                    if (string.Equals(candidate.FullName, currentPath, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!keptPrevious) { keptPrevious = true; continue; }
+                    try { candidate.Delete(true); }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
             }
-            return builder.ToString();
-        }
-
-        private static string QuoteArgument(string value)
-        {
-            if (value.Length > 0 && value.IndexOfAny(new[] { ' ', '\t', '"' }) < 0) return value;
-            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         private static bool HasArgument(string[] args, string expected)

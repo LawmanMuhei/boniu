@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = 'Release',
+    [string]$OutputRoot = '',
+    [switch]$TestsOnly,
+    [switch]$SkipSigning,
+    [switch]$RequireSigning,
     [ValidateSet('x64', 'x86')]
     [string]$Platform = 'x64',
     [string]$SignPfxPath = $env:BONIU_SIGN_PFX,
@@ -9,19 +13,34 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($RequireSigning -and ($SkipSigning -or $TestsOnly)) { throw 'RequireSigning conflicts with validation/no-signing mode.' }
+if ($RequireSigning -and [string]::IsNullOrWhiteSpace($SignPfxPath) -and [string]::IsNullOrWhiteSpace($SignCertificateThumbprint)) {
+    throw 'RequireSigning needs BONIU_SIGN_PFX or BONIU_SIGN_THUMBPRINT. No certificate was configured.'
+}
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $sourceRoot = Join-Path $projectRoot 'src'
-$buildRoot = Join-Path $projectRoot 'build'
+$versionSource = Get-Content -LiteralPath (Join-Path $sourceRoot 'AppVersion.cs') -Raw -Encoding UTF8
+if ($versionSource -notmatch 'Current = "(\d+\.\d+\.\d+)"') { throw 'Missing AppVersion.Current.' }
+$appVersion = $Matches[1]
+& (Join-Path $PSScriptRoot 'check-version.ps1')
+# Validation builds never overwrite release artifacts. Each architecture has its own dependencies.
+$outputBase = if ([string]::IsNullOrWhiteSpace($OutputRoot)) { $projectRoot } else { [IO.Path]::GetFullPath((Join-Path $projectRoot $OutputRoot)) }
+if ($outputBase -ne $projectRoot -and -not $outputBase.StartsWith($projectRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputRoot must stay inside the project.'
+}
+$buildRoot = Join-Path $outputBase ("build\" + $Platform)
 $payloadRoot = Join-Path $buildRoot ("payload-" + $Platform)
-$distRoot = Join-Path $projectRoot 'dist'
+$distRoot = Join-Path $outputBase 'dist'
 $packageVersion = '1.0.4191.47'
 $packagesRoot = Join-Path $projectRoot '.packages'
 $packageRoot = Join-Path $packagesRoot "Microsoft.Web.WebView2.$packageVersion"
 $packageFile = Join-Path $packagesRoot "Microsoft.Web.WebView2.$packageVersion.nupkg"
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+if (-not (Test-Path -LiteralPath $compiler)) { $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
 $frameworkRoot = Split-Path -Parent $compiler
 
 function Invoke-CodeSign([string]$FilePath) {
+    if ($SkipSigning -or $TestsOnly) { Write-Host "Code signing disabled for validation: $FilePath"; return }
     if ([string]::IsNullOrWhiteSpace($SignPfxPath) -and [string]::IsNullOrWhiteSpace($SignCertificateThumbprint)) {
         Write-Host "Code signing skipped (no certificate configured): $FilePath"
         return
@@ -43,6 +62,8 @@ function Invoke-CodeSign([string]$FilePath) {
     $signArguments += $FilePath
     & $signTool @signArguments
     if ($LASTEXITCODE -ne 0) { throw "Code signing failed with exit code ${LASTEXITCODE}: $FilePath" }
+    $signature = Get-AuthenticodeSignature -LiteralPath $FilePath
+    if ($signature.Status -ne 'Valid') { throw "Signature verification failed: $($signature.Status)" }
 }
 
 if (-not (Test-Path -LiteralPath $compiler)) {
@@ -68,6 +89,10 @@ if (Test-Path -LiteralPath $buildRoot) {
     Remove-Item -LiteralPath $resolvedBuild -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $payloadRoot, $distRoot | Out-Null
+$manifestPath = Join-Path $buildRoot 'app.manifest'
+$manifest = Get-Content -LiteralPath (Join-Path $projectRoot 'app.manifest') -Raw -Encoding UTF8
+$manifest = [regex]::Replace($manifest, '(assemblyIdentity version=")[^"]+', ('${1}' + $appVersion + '.0'))
+[IO.File]::WriteAllText($manifestPath, $manifest, [Text.UTF8Encoding]::new($false))
 
 $webViewLib = Join-Path $packageRoot 'lib\net462'
 $nativeLoader = Join-Path $packageRoot ("runtimes\win-" + $Platform + "\native\WebView2Loader.dll")
@@ -90,25 +115,17 @@ $references = @(
 $facadeRuntime = Join-Path $frameworkRoot 'Facades\System.Runtime.dll'
 if (Test-Path -LiteralPath $facadeRuntime) { $references += $facadeRuntime }
 $referenceArguments = $references | ForEach-Object { "/reference:$_" }
-$appSources = @(
-    (Join-Path $sourceRoot 'AssemblyInfo.cs'),
-    (Join-Path $sourceRoot 'Diagnostics.cs'),
-    (Join-Path $sourceRoot 'Logic.cs'),
-    (Join-Path $sourceRoot 'SettingsStore.cs'),
-    (Join-Path $sourceRoot 'UpdateService.cs'),
-    (Join-Path $sourceRoot 'MainForm.cs'),
-    (Join-Path $sourceRoot 'Program.cs')
-)
+$appSources = @(Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cs' | Where-Object { $_.Name -ne 'Bootstrap.cs' } | Sort-Object Name | ForEach-Object { $_.FullName })
 
 & $compiler /nologo /codepage:65001 /optimize+ /debug- "/platform:$Platform" /target:winexe `
     "/win32icon:$iconFile" `
-    "/win32manifest:$(Join-Path $projectRoot 'app.manifest')" "/out:$appExecutable" `
+    "/win32manifest:$manifestPath" "/out:$appExecutable" `
     $referenceArguments $appSources
 if ($LASTEXITCODE -ne 0) { throw "Application compilation failed with exit code $LASTEXITCODE." }
 Invoke-CodeSign $appExecutable
 
 & $compiler /nologo /codepage:65001 /optimize+ /debug- "/platform:$Platform" /target:exe `
-    "/win32manifest:$(Join-Path $projectRoot 'app.manifest')" "/out:$testExecutable" `
+    "/win32manifest:$manifestPath" "/out:$testExecutable" `
     $referenceArguments $appSources
 if ($LASTEXITCODE -ne 0) { throw "Test compilation failed with exit code $LASTEXITCODE." }
 
@@ -120,6 +137,13 @@ Copy-Item -LiteralPath (Join-Path $webViewLib 'Microsoft.Web.WebView2.Core.dll')
 Copy-Item -LiteralPath (Join-Path $webViewLib 'Microsoft.Web.WebView2.WinForms.dll') -Destination $buildRoot -Force
 Copy-Item -LiteralPath $nativeLoader -Destination $buildRoot -Force
 
+if ($TestsOnly) {
+    & $testExecutable --self-test
+    if ($LASTEXITCODE -ne 0) { throw "Self-tests failed: $LASTEXITCODE" }
+    Write-Host "TEST_EXECUTABLE=$testExecutable"
+    return
+}
+
 $bootstrapResources = @(
     "/resource:$appExecutable,payload.BoNiuMoYu.exe",
     "/resource:$appExecutable.config,payload.BoNiuMoYu.exe.config",
@@ -129,13 +153,14 @@ $bootstrapResources = @(
 )
 & $compiler /nologo /codepage:65001 /optimize+ /debug- "/platform:$Platform" /target:winexe `
     "/win32icon:$iconFile" `
-    "/win32manifest:$(Join-Path $projectRoot 'app.manifest')" "/out:$finalExecutable" `
+    "/win32manifest:$manifestPath" "/out:$finalExecutable" `
     "/reference:$(Join-Path $frameworkRoot 'System.dll')" `
     "/reference:$(Join-Path $frameworkRoot 'System.Core.dll')" `
     "/reference:$(Join-Path $frameworkRoot 'System.Windows.Forms.dll')" `
     "/reference:$(Join-Path $frameworkRoot 'System.IO.Compression.dll')" `
     "/reference:$(Join-Path $frameworkRoot 'System.IO.Compression.FileSystem.dll')" `
-    $bootstrapResources (Join-Path $sourceRoot 'AssemblyInfo.cs') (Join-Path $sourceRoot 'Bootstrap.cs')
+    $bootstrapResources (Join-Path $sourceRoot 'AppVersion.cs') (Join-Path $sourceRoot 'AssemblyInfo.cs') `
+    (Join-Path $sourceRoot 'CommandLineArguments.cs') (Join-Path $sourceRoot 'Bootstrap.cs')
 if ($LASTEXITCODE -ne 0) { throw "Bootstrap compilation failed with exit code $LASTEXITCODE." }
 Invoke-CodeSign $finalExecutable
 

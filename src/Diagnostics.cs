@@ -12,7 +12,7 @@ namespace MiniView.WebView2App
     /// </summary>
     internal static class Diagnostics
     {
-        private const int RingSize = 96;
+        private const int RingSize = 128;
 
         private static readonly object Gate = new object();
         private static readonly string[] Ring = new string[RingSize];
@@ -92,11 +92,10 @@ namespace MiniView.WebView2App
         internal static void LogException(string context, Exception exception)
         {
             if (exception == null) { Log(context); return; }
-            Log(context + ": " + exception.GetType().Name + ": " + exception.Message
+            Log(context + ": " + exception.GetType().Name + " [0x" + exception.HResult.ToString("X8") + "]: " + exception.Message
                 + Environment.NewLine + exception.StackTrace);
-            AggregateException aggregate = exception as AggregateException;
-            if (aggregate != null && aggregate.InnerException != null)
-                LogException(context + " (inner)", aggregate.InnerException);
+            if (exception.InnerException != null)
+                LogException(context + " (inner)", exception.InnerException);
         }
 
         private static void Guard(object state)

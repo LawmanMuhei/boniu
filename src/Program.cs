@@ -20,12 +20,12 @@ namespace MiniView.WebView2App
             if (HasArgument(args, "--update-check-test")) return RunUpdateCheckTest();
 
             bool testMode = HasArgument(args, "--smoke-test") || HasArgument(args, "--live-smoke-test")
-                || HasArgument(args, "--settings-smoke-test") || HasArgument(args, "--dom-probe");
+                || HasArgument(args, "--settings-smoke-test") || HasArgument(args, "--dom-probe") || HasArgument(args, "--regression-test");
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-            Diagnostics.Start(Path.Combine(
+            Diagnostics.Start(testMode ? Path.Combine(Path.GetTempPath(), "MiniViewWebView2Smoke", System.Diagnostics.Process.GetCurrentProcess().Id.ToString(), "logs") : Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "MiniViewWebView2", "logs"));
             Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
@@ -49,8 +49,9 @@ namespace MiniView.WebView2App
                         {
                             using (EventWaitHandle existing = EventWaitHandle.OpenExisting(ShowEventName)) existing.Set();
                         }
-                        catch
+                        catch (Exception exception)
                         {
+                            Diagnostics.LogException("NotifyExistingInstance", exception);
                         }
                         return 0;
                     }
@@ -84,6 +85,13 @@ namespace MiniView.WebView2App
             bool settingsSmokeTest = HasArgument(args, "--settings-smoke-test");
             bool domProbe = HasArgument(args, "--dom-probe");
             string healthToken = GetArgumentValue(args, "--update-health-token");
+
+            if (smokeTest || liveSmokeTest || settingsSmokeTest || domProbe || HasArgument(args, "--regression-test"))
+            {
+                using (MainForm testForm = new MainForm(smokeTest, liveSmokeTest, settingsSmokeTest, domProbe, null, HasArgument(args, "--regression-test")))
+                    Application.Run(testForm);
+                return Environment.ExitCode;
+            }
 
             using (EventWaitHandle showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName))
             using (MainForm form = new MainForm(smokeTest, liveSmokeTest, settingsSmokeTest, domProbe, healthToken))
@@ -173,6 +181,31 @@ namespace MiniView.WebView2App
                 UiPaint.RoundedPath(new RectangleF(0F, 0F, 30F, 28F), 8F))
                 failures += Check(normal.PointCount > 0, "正常尺寸生成圆角路径");
 
+            WindowLifecycle state = new WindowLifecycle();
+            long hidden = state.SetVisible(false);
+            failures += Check(!state.Visible && state.IsCurrent(hidden), "隐藏状态有效");
+            long shown = state.SetVisible(true);
+            failures += Check(state.Visible && state.IsCurrent(shown) && !state.IsCurrent(hidden), "恢复使旧隐藏回调过期");
+            long hiddenAgain = state.SetVisible(false);
+            failures += Check(!state.IsCurrent(shown) && state.IsCurrent(hiddenAgain), "再隐藏使旧恢复回调过期");
+            long refreshed = state.Refresh();
+            failures += Check(!state.IsCurrent(hiddenAgain) && state.IsCurrent(refreshed), "导航或媒体刷新使旧操作过期");
+            state.Close();
+            failures += Check(!state.IsCurrent(refreshed), "关闭后回调不能修改界面");
+            failures += Check(!defaultSettings.ShowTrayIcon, "默认不强制显示托盘");
+            failures += Check(!upgradedSettings.ShowTrayIcon, "旧设置可兼容新增托盘选项");
+            failures += Check(PageScripts.LiveProbeScript.Contains("style.remove()"), "退出直播清除适配样式");
+            failures += Check(MediaScripts.Build(42, false).Contains("revision = 42"), "媒体命令包含操作代次");
+            failures += Check(MediaScripts.Build(42, true).Contains("revision < state.revision"), "媒体命令拒绝过期请求");
+            failures += Check(MiniView.CommandLineArguments.QuoteWindowsArgument("") == "\"\"", "空参数保留为空字符串");
+            failures += Check(MiniView.CommandLineArguments.QuoteWindowsArgument("plain") == "plain", "简单参数无需引号");
+            failures += Check(MiniView.CommandLineArguments.QuoteWindowsArgument("C:\\Program Files\\Boniu\\")
+                == "\"C:\\Program Files\\Boniu\\\\\"", "带空格和尾反斜杠的参数正确引用");
+            failures += Check(MiniView.CommandLineArguments.QuoteWindowsArgument("say\"hi")
+                == "\"say\\\"hi\"", "参数内引号正确转义");
+
+            failures += UpdateTests.Run(Check);
+            failures += Check(UpdateService.CurrentVersion.ToString(3) == AppVersion.Current, "程序集版本与单一版本源一致");
             Console.WriteLine(failures == 0 ? checkedCount + " tests passed" : failures + " tests failed");
             return failures == 0 ? 0 : 1;
         }

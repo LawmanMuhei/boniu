@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Web.Script.Serialization;
 
 namespace MiniView.WebView2App
@@ -29,21 +30,23 @@ namespace MiniView.WebView2App
         internal string ExecutablePath;
     }
 
-    internal sealed class UpdateService
+    internal sealed class UpdateService : IDisposable
     {
         private const string LatestReleaseApi = "https://api.github.com/repos/LawmanMuhei/boniu/releases/latest";
         private const long MaximumExecutableBytes = 50L * 1024L * 1024L;
+        private const int SettingsBackupRetention = 3;
         private readonly string appFolder;
         private readonly string launcherPath;
         private readonly string executableAssetName;
         private readonly HttpClient client;
+        private readonly CancellationTokenSource shutdown = new CancellationTokenSource();
 
-        internal UpdateService(string appFolder)
+        internal UpdateService(string appFolder, HttpMessageHandler handler = null)
         {
             this.appFolder = appFolder;
             launcherPath = Environment.GetEnvironmentVariable("BONIU_LAUNCHER_PATH");
             executableAssetName = GetExecutableAssetName(IntPtr.Size);
-            client = new HttpClient();
+            client = handler == null ? new HttpClient() : new HttpClient(handler);
             client.Timeout = TimeSpan.FromSeconds(20);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("BoniuMoyu/" + CurrentVersion.ToString(3));
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
@@ -56,7 +59,7 @@ namespace MiniView.WebView2App
 
         internal async Task<UpdateInfo> CheckAsync()
         {
-            using (HttpResponseMessage response = await client.GetAsync(LatestReleaseApi))
+            using (HttpResponseMessage response = await client.GetAsync(LatestReleaseApi, shutdown.Token))
             {
                 if (response.StatusCode == HttpStatusCode.NotFound) return null;
                 response.EnsureSuccessStatusCode();
@@ -99,36 +102,52 @@ namespace MiniView.WebView2App
             EnsureHttps(info.AssetUrl);
             EnsureHttps(info.HashUrl);
 
-            string hashText = await DownloadTextLimitedAsync(info.HashUrl, 4096);
-            string expectedHash = ExtractSha256(hashText);
-            if (expectedHash == null) throw new InvalidDataException("版本校验文件格式不正确。");
-
-            string updateFolder = Path.Combine(appFolder, "Updates", info.Version.ToString(3));
-            Directory.CreateDirectory(updateFolder);
-            string stagedPath = Path.Combine(updateFolder, executableAssetName);
-            string partialPath = stagedPath + ".part";
-            if (File.Exists(partialPath)) File.Delete(partialPath);
-
-            using (HttpResponseMessage response = await client.GetAsync(info.AssetUrl, HttpCompletionOption.ResponseHeadersRead))
+            if (info.Version == null) throw new InvalidDataException("更新版本号缺失。");
+            using (CancellationTokenSource transfer = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token))
             {
-                response.EnsureSuccessStatusCode();
-                long? length = response.Content.Headers.ContentLength;
-                if (length.HasValue && length.Value > MaximumExecutableBytes)
-                    throw new InvalidDataException("更新文件超过允许的大小。");
-                using (Stream input = await response.Content.ReadAsStreamAsync())
-                using (FileStream output = new FileStream(partialPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    await CopyLimitedAsync(input, output, MaximumExecutableBytes);
-            }
+                // HttpClient.Timeout does not bound body reads with ResponseHeadersRead.
+                transfer.CancelAfter(TimeSpan.FromMinutes(3));
+                CancellationToken token = transfer.Token;
+                string hashText = await DownloadTextLimitedAsync(info.HashUrl, 4096, token).ConfigureAwait(false);
+                string expectedHash = ExtractSha256(hashText);
+                if (expectedHash == null) throw new InvalidDataException("版本校验文件格式不正确。");
 
-            string actualHash = ComputeSha256(partialPath);
-            if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
-            {
-                File.Delete(partialPath);
-                throw new InvalidDataException("更新文件 SHA-256 校验失败，已取消安装。");
+                string updateFolder = Path.Combine(appFolder, "Updates", info.Version.ToString(3));
+                Directory.CreateDirectory(updateFolder);
+                string stagedPath = Path.Combine(updateFolder, executableAssetName);
+                string partialPath = stagedPath + ".part";
+                try
+                {
+                    using (HttpResponseMessage response = await client.GetAsync(info.AssetUrl, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        long? length = response.Content.Headers.ContentLength;
+                        if (length.HasValue && length.Value > MaximumExecutableBytes)
+                            throw new InvalidDataException("更新文件超过允许的大小。");
+                        using (Stream input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        using (FileStream output = new FileStream(partialPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                            await CopyLimitedAsync(input, output, MaximumExecutableBytes, token).ConfigureAwait(false);
+                    }
+                    token.ThrowIfCancellationRequested();
+                    if (!string.Equals(expectedHash, ComputeSha256(partialPath), StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("更新文件 SHA-256 校验失败，已取消安装。");
+                    if (File.Exists(stagedPath)) File.Delete(stagedPath);
+                    File.Move(partialPath, stagedPath);
+                    return new PreparedUpdate { Info = info, ExecutablePath = stagedPath };
+                }
+                finally
+                {
+                    try { if (File.Exists(partialPath)) File.Delete(partialPath); }
+                    catch (Exception exception) { Diagnostics.LogException("UpdatePartialCleanup", exception); }
+                }
             }
-            if (File.Exists(stagedPath)) File.Delete(stagedPath);
-            File.Move(partialPath, stagedPath);
-            return new PreparedUpdate { Info = info, ExecutablePath = stagedPath };
+        }
+
+        public void Dispose()
+        {
+            shutdown.Cancel();
+            client.Dispose();
+            shutdown.Dispose();
         }
 
         internal void BeginInstall(PreparedUpdate prepared, int oldProcessId)
@@ -171,9 +190,26 @@ namespace MiniView.WebView2App
             Directory.CreateDirectory(backupFolder);
             string backupPath = Path.Combine(backupFolder, "settings-before-update-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".json");
             File.Copy(settingsPath, backupPath, false);
+            RetainNewestFiles(backupFolder, "settings-before-update-*.json", SettingsBackupRetention);
         }
 
-        private static string BuildInstallScript(int oldProcessId, string target, string staged, string backup,
+        internal static void RetainNewestFiles(string folder, string pattern, int keepCount)
+        {
+            if (keepCount < 0) throw new ArgumentOutOfRangeException("keepCount");
+            if (!Directory.Exists(folder)) return;
+            string[] files = Directory.GetFiles(folder, pattern, SearchOption.TopDirectoryOnly);
+            Array.Sort(files, delegate(string left, string right)
+            {
+                return File.GetLastWriteTimeUtc(right).CompareTo(File.GetLastWriteTimeUtc(left));
+            });
+            for (int i = keepCount; i < files.Length; i++)
+            {
+                try { File.Delete(files[i]); }
+                catch (Exception exception) { Diagnostics.LogException("UpdateBackupCleanup", exception); }
+            }
+        }
+
+        internal static string BuildInstallScript(int oldProcessId, string target, string staged, string backup,
             string marker, string token, string logPath, string scriptPath)
         {
             Func<string, string> q = PowerShellLiteral;
@@ -201,6 +237,7 @@ namespace MiniView.WebView2App
             script.AppendLine("  if (-not (Test-Path -LiteralPath $marker)) { throw 'New version did not report healthy startup.' }");
             script.AppendLine("  Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue");
             script.AppendLine("  Add-Content -LiteralPath $log -Value ((Get-Date).ToString('s') + ' update succeeded') -Encoding UTF8");
+            script.AppendLine("  Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue");
             script.AppendLine("} catch {");
             script.AppendLine("  Add-Content -LiteralPath $log -Value ((Get-Date).ToString('s') + ' update failed: ' + $_.Exception.Message) -Encoding UTF8");
             script.AppendLine("  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($healthToken) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }");
@@ -217,7 +254,7 @@ namespace MiniView.WebView2App
             if (string.IsNullOrEmpty(token) || token.Length > 64) return;
             foreach (char c in token) if (!Uri.IsHexDigit(c)) return;
             try { File.WriteAllText(GetHealthMarkerPath(token), CurrentVersion.ToString(), Encoding.ASCII); }
-            catch { }
+            catch (Exception exception) { Diagnostics.LogException("MarkUpdateHealthy", exception); }
         }
 
         internal static string GetHealthMarkerPath(string token)
@@ -248,40 +285,37 @@ namespace MiniView.WebView2App
 
         internal static string ExtractSha256(string text)
         {
-            if (string.IsNullOrEmpty(text)) return null;
-            for (int i = 0; i + 64 <= text.Length; i++)
-            {
-                bool valid = true;
-                for (int j = 0; j < 64; j++) if (!Uri.IsHexDigit(text[i + j])) { valid = false; break; }
-                if (valid) return text.Substring(i, 64).ToLowerInvariant();
-            }
-            return null;
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            string first = text.Trim().Split(new char[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)[0];
+            if (first.Length != 64) return null;
+            foreach (char c in first) if (!Uri.IsHexDigit(c)) return null;
+            return first.ToLowerInvariant();
         }
 
-        private async Task<string> DownloadTextLimitedAsync(string url, int maximumBytes)
+        private async Task<string> DownloadTextLimitedAsync(string url, int maximumBytes, CancellationToken token)
         {
-            using (HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+            using (HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token))
             {
                 response.EnsureSuccessStatusCode();
                 using (Stream input = await response.Content.ReadAsStreamAsync())
                 using (MemoryStream output = new MemoryStream())
                 {
-                    await CopyLimitedAsync(input, output, maximumBytes);
+                    await CopyLimitedAsync(input, output, maximumBytes, token);
                     return Encoding.UTF8.GetString(output.ToArray());
                 }
             }
         }
 
-        private static async Task CopyLimitedAsync(Stream input, Stream output, long maximumBytes)
+        private static async Task CopyLimitedAsync(Stream input, Stream output, long maximumBytes, CancellationToken token)
         {
             byte[] buffer = new byte[81920];
             long total = 0;
             int read;
-            while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            while ((read = await input.ReadAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false)) > 0)
             {
                 total += read;
                 if (total > maximumBytes) throw new InvalidDataException("下载内容超过允许的大小。");
-                await output.WriteAsync(buffer, 0, read);
+                await output.WriteAsync(buffer, 0, read, token).ConfigureAwait(false);
             }
         }
 

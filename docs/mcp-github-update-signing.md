@@ -1,6 +1,6 @@
 # GitHub Releases 更新、回滚和可选代码签名
 
-- 当前版本：1.7.0
+- 当前版本：1.8.0
 - 更新源：`https://github.com/LawmanMuhei/boniu`
 - 检查策略：每次启动检查，发现新版后提示用户确认
 

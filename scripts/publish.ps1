@@ -3,24 +3,26 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$Version,
-    [string]$Notes = '稳定性改进和问题修复。'
+    [string]$Notes = '稳定性改进和问题修复。',
+    [switch]$RequireSigning
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$assemblyInfo = Get-Content (Join-Path $projectRoot 'src\AssemblyInfo.cs') -Raw
-if ($assemblyInfo -notmatch [regex]::Escape("AssemblyVersion(`"$Version.0`")")) {
-    throw "AssemblyInfo.cs version does not match $Version. Update it before publishing."
+& (Join-Path $PSScriptRoot 'check-version.ps1')
+$versionSource = Get-Content (Join-Path $projectRoot 'src\AppVersion.cs') -Raw -Encoding UTF8
+if ($versionSource -notmatch 'Current = "(\d+\.\d+\.\d+)"' -or $Matches[1] -ne $Version) {
+    throw "AppVersion.cs version does not match $Version. Update it and the documentation before publishing."
 }
 
-& (Join-Path $PSScriptRoot 'build.ps1') -Platform x64
+& (Join-Path $PSScriptRoot 'build.ps1') -Platform x64 -RequireSigning:$RequireSigning
 $x64Executable = Join-Path $projectRoot 'dist\BoniuMoyu.exe'
 Copy-Item -LiteralPath (Join-Path $projectRoot 'dist\波妞摸鱼.exe') -Destination $x64Executable -Force
 $x64HashFile = $x64Executable + '.sha256'
 $x64Hash = (Get-FileHash -LiteralPath $x64Executable -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText($x64HashFile, "$x64Hash  BoniuMoyu.exe`n", [Text.UTF8Encoding]::new($false))
 
-& (Join-Path $PSScriptRoot 'build.ps1') -Platform x86
+& (Join-Path $PSScriptRoot 'build.ps1') -Platform x86 -RequireSigning:$RequireSigning
 $x86Executable = Join-Path $projectRoot 'dist\BoniuMoyu-x86.exe'
 Copy-Item -LiteralPath (Join-Path $projectRoot 'dist\波妞摸鱼-x86.exe') -Destination $x86Executable -Force
 $x86HashFile = $x86Executable + '.sha256'
