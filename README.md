@@ -2,7 +2,7 @@
 
 波妞摸鱼是一款开源、轻量的 Windows 抖音桌面小窗工具。它基于 Microsoft Edge WebView2，支持窗口置顶、老板键快速隐藏、鼠标移出自动隐藏、清爽模式、直播横屏、登录状态保存，以及 x64 / x86 Windows。
 
-项目适合需要“抖音摸鱼小窗口”“Windows 抖音悬浮窗”“抖音老板键”或轻量抖音桌面客户端的用户。程序最终交付为单个 EXE；首次运行会把组件解压到 `%LOCALAPPDATA%\MiniViewWebView2\App\1.8.0-<架构>`，以后直接复用。抖音网页由系统 WebView2 Runtime 渲染，不携带完整 Chromium/Electron。
+项目适合需要“抖音摸鱼小窗口”“Windows 抖音悬浮窗”“抖音老板键”或轻量抖音桌面客户端的用户。程序最终交付为单个 EXE；首次运行会把组件解压到 `%LOCALAPPDATA%\MiniViewWebView2\App\1.8.1-<架构>`，以后直接复用。抖音网页由系统 WebView2 Runtime 渲染，不携带完整 Chromium/Electron。
 
 ## 下载
 
@@ -51,14 +51,14 @@
 .\scripts\build.ps1 -Platform x86
 ```
 
-脚本使用 Windows 自带的 .NET Framework 4.8 编译器，并在项目内下载 Microsoft WebView2 SDK NuGet 包。64 位输出为 `dist\波妞摸鱼.exe`，32 位输出为 `dist\波妞摸鱼-x86.exe`。两种架构使用各自的 WebView2Loader 和 `%LOCALAPPDATA%\MiniViewWebView2\App\1.8.0-<架构>` 目录。
+脚本使用 Windows 自带的 .NET Framework 4.8 编译器，并在项目内下载 Microsoft WebView2 SDK NuGet 包。64 位输出为 `dist\波妞摸鱼.exe`，32 位输出为 `dist\波妞摸鱼-x86.exe`。两种架构使用各自的 WebView2Loader 和 `%LOCALAPPDATA%\MiniViewWebView2\App\1.8.1-<架构>` 目录。
 
 版本唯一来源是 `src/AppVersion.cs`；构建前会核对程序集、启动器、清单、README 和使用说明的一致性。未发布的本轮优化沿用源码版本，不表示 GitHub 已发布这些变更。
 
 没有代码签名证书时构建会明确跳过签名。以后取得 PFX 证书后设置 `BONIU_SIGN_PFX` 和 `BONIU_SIGN_PASSWORD`，或设置证书存储指纹 `BONIU_SIGN_THUMBPRINT`，构建脚本会同时签名内层程序与最终 EXE，使用时间戳服务并验证签名。需要强制签名时可传 `-RequireSigning`，缺少证书即失败；不会自动购买或获取证书。发布新版本可运行：
 
 ```powershell
-.\scripts\publish.ps1 -Version 1.8.0 -Notes '更新说明'
+.\scripts\publish.ps1 -Version 1.8.1 -Notes '更新说明'
 ```
 
 发布脚本会上传 x64 的 `BoniuMoyu.exe`、x86 的 `BoniuMoyu-x86.exe` 及各自的 `.sha256`。自动更新会按当前进程架构选择正确资产。需要提前安装 `gh` 并执行 `gh auth login`。当前没有签名证书，因此 SHA-256 与 GitHub HTTPS 可校验下载完整性，但 Windows 仍可能显示“未知发布者”，直到配置正式代码签名证书。
