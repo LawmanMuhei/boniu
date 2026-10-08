@@ -19,9 +19,9 @@
 
 ## 下载
 
-- 64 位 Windows：`BoniuMoyu.exe`
-- 32 位 Windows：`BoniuMoyu-x86.exe`
-- 每个 EXE 附对应的 `.sha256` 校验文件；程序内自动更新同样会执行 SHA-256 校验。
+- 手动下载（推荐）：64 位 `BoniuMoyu-1.8.1-x64.exe`，32 位 `BoniuMoyu-1.8.1-x86.exe`
+- 自动更新资产：`BoniuMoyu.exe` / `BoniuMoyu-x86.exe`（程序内更新按固定文件名匹配，请勿手动下载或改名）
+- 每个 EXE 附对应的 `.sha256` 校验文件；两种文件内容一致，程序内自动更新同样会执行 SHA-256 校验。
 
 ## 升级说明
 

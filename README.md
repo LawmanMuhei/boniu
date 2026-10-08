@@ -10,10 +10,10 @@
 > **本程序仅支持 Windows 10 / Windows 11，不支持 Windows 7、Windows 8 或 Windows 8.1。** 请勿在 Windows 7 上下载或运行。
 
 - [GitHub Releases 下载页面](https://github.com/LawmanMuhei/boniu/releases/latest)
-- 64 位 Windows：`BoniuMoyu.exe`
-- 32 位 Windows：`BoniuMoyu-x86.exe`
+- 手动下载（推荐，文件名带版本号）：64 位 `BoniuMoyu-<版本>-x64.exe`，32 位 `BoniuMoyu-<版本>-x86.exe`
+- 自动更新资产：`BoniuMoyu.exe` / `BoniuMoyu-x86.exe`，程序内更新按这两个固定文件名匹配，请勿手动下载或改名
 
-每个 EXE 都提供配套 `.sha256` 文件，可用于校验下载完整性。程序暂未配置商业代码签名证书，因此 Windows 可能显示“未知发布者”。
+每个 EXE 都提供配套 `.sha256` 文件，可用于校验下载完整性；带版本号与不带版本号的文件内容完全一致，只是文件名不同。程序暂未配置商业代码签名证书，因此 Windows 可能显示“未知发布者”。
 
 ## 功能
 
@@ -61,7 +61,7 @@
 .\scripts\publish.ps1 -Version 1.8.1 -Notes '更新说明'
 ```
 
-发布脚本会上传 x64 的 `BoniuMoyu.exe`、x86 的 `BoniuMoyu-x86.exe` 及各自的 `.sha256`。自动更新会按当前进程架构选择正确资产。需要提前安装 `gh` 并执行 `gh auth login`。当前没有签名证书，因此 SHA-256 与 GitHub HTTPS 可校验下载完整性，但 Windows 仍可能显示“未知发布者”，直到配置正式代码签名证书。
+发布脚本会上传 x64 的 `BoniuMoyu.exe`、x86 的 `BoniuMoyu-x86.exe` 及各自的 `.sha256`（自动更新按固定文件名匹配），同时上传带版本号的手动下载副本 `BoniuMoyu-<版本>-x64.exe` / `BoniuMoyu-<版本>-x86.exe` 及校验文件，并为自动更新资产设置显示标签，避免用户下错版本。需要提前安装 `gh` 并执行 `gh auth login`。当前没有签名证书，因此 SHA-256 与 GitHub HTTPS 可校验下载完整性，但 Windows 仍可能显示“未知发布者”，直到配置正式代码签名证书。
 
 应用图标源文件位于 `assets\boniu-moyu-icon.svg`，构建时使用包含 16 至 256 像素尺寸的 `assets\boniu-moyu.ico`。
 
