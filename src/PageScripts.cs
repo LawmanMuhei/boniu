@@ -84,10 +84,17 @@ namespace MiniView.WebView2App
   st.setAttribute('data-immersive'," + (immersive ? "'1'" : "'0'") + @");
   var G='__boniuAlignGuard';
   if(window[G]){clearInterval(window[G]);window[G]=0;}
-  // 无侵入健康检查：只观察当前活动视频是否仍覆盖页面中心；不 resize、不改播放器定位。
-  // 连续两次异常时清空注入样式，回退抖音原始布局，避免页面改版后黑屏。
+  // 无侵入健康检查：只确认视口中心仍有正在渲染的 video 覆盖；不 resize、不改播放器定位。
+  // 判定不依赖 feed-active-video 标记：推荐流是虚拟列表，滚动时该标记会被回收或改写，
+  // 标记缺失不等于布局异常。滚动/滚轮/触摸期间失败计数清零，切换过渡帧不会被累计。
   var H='__boniuImmersiveHealthGuard';
-  if(window[H]){clearInterval(window[H]);window[H]=0;}
+  var HK='__boniuImmersiveHealthHooks';
+  var healthEvents=['scroll','wheel','touchmove'];
+  var stopHealthGuard=function(){
+    if(window[H]){clearInterval(window[H]);window[H]=0;}
+    if(window[HK]){window[HK].forEach(function(h){healthEvents.forEach(function(e){removeEventListener(e,h,true);});});window[HK]=0;}
+  };
+  stopHealthGuard();
   if(" + (immersive ? "true" : "false") + @"){
     var misses=0;
     var coversCenter=function(el){
@@ -96,18 +103,29 @@ namespace MiniView.WebView2App
       return cs.display!=='none'&&cs.visibility!=='hidden'&&r.width>innerWidth*.4&&r.height>innerHeight*.4&&
         r.left<=innerWidth/2&&r.right>=innerWidth/2&&r.top<=innerHeight/2&&r.bottom>=innerHeight/2;
     };
+    var reset=function(){misses=0;};
+    healthEvents.forEach(function(e){addEventListener(e,reset,true);});
+    window[HK]=[reset];
     window[H]=setInterval(function(){
       var s=document.getElementById(S);
-      if(!s||s.getAttribute('data-immersive')!=='1'){clearInterval(window[H]);window[H]=0;return;}
-      var active=document.querySelector('[data-e2e=""feed-active-video""]');
-      var videos=active?active.querySelectorAll('video'):document.querySelectorAll('video');
+      if(!s||s.getAttribute('data-immersive')!=='1'){stopHealthGuard();return;}
+      var videos=document.querySelectorAll('video');
       if(!videos.length)return;
-      var ok=coversCenter(active);
-      if(ok){var any=false;videos.forEach(function(v){if(coversCenter(v))any=true;});ok=any;}
+      // 任意一个正在渲染的 video 覆盖视口中心即视为健康：推荐页主播放器、视频详情页
+      // 播放器、从设置返回后的首帧都满足；只有“有 video 在渲染但无一覆盖中心”才计数。
+      var ok=false,rendering=false;
+      for(var i=0;i<videos.length;i++){
+        var box=videos[i].getBoundingClientRect(),style=getComputedStyle(videos[i]);
+        if(style.display==='none'||style.visibility==='hidden'||box.width<=0||box.height<=0)continue;
+        rendering=true;
+        if(coversCenter(videos[i])){ok=true;break;}
+      }
+      if(!rendering)return;
       misses=ok?0:misses+1;
-      if(misses<2)return;
+      // 连续 3 次（约 4.5 秒）异常才判定布局损坏，给滚动与视频切换留足过渡时间。
+      if(misses<3)return;
       s.textContent='';s.setAttribute('data-fallback','1');
-      clearInterval(window[H]);window[H]=0;
+      stopHealthGuard();
       try{window.chrome.webview.postMessage('boniu:immersive-fallback:'+revision);}catch(e){}
     },1500);
   }
