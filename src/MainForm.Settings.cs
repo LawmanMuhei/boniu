@@ -40,6 +40,7 @@ namespace MiniView.WebView2App
             AddInlineRow(hotkeyCard, "隐藏/显示程序", windowShortcutStatus, windowShortcutButton, 104, 30);
             AddInlineRow(hotkeyCard, "隐藏/显示边框", chromeShortcutStatus, chromeShortcutButton, 104, 30);
             AddInlineRow(hotkeyCard, "清爽模式", immersiveShortcutStatus, immersiveShortcutButton, 104, 30);
+            AddInlineRow(hotkeyCard, "迷你小窗", miniShortcutStatus, miniShortcutButton, 104, 30);
             AddInlineRow(hotkeyCard, "静音/恢复声音", muteShortcutStatus, muteShortcutButton, 104, 30);
 
             SettingsCard behaviorCard = AddCard("行为");
@@ -62,6 +63,7 @@ namespace MiniView.WebView2App
             AddInlineRow(interfaceCard, "隐藏顶部搜索栏", topBarStatus, topBarToggle, 44, 26);
             AddInlineRow(interfaceCard, "隐藏右侧互动区", rightBarStatus, rightBarToggle, 44, 26);
             AddInlineRow(interfaceCard, "清爽模式（保留原生播放器）", immersiveStatus, immersiveToggle, 44, 26);
+            AddInlineRow(interfaceCard, "迷你小窗（角落悬浮监视）", miniStatus, miniToggle, 44, 26);
             AddFullWidthRow(interfaceCard, retryPageButton, 36);
             retryPageButton.Click += delegate { ReapplyPageStyles(); };
 
@@ -85,6 +87,12 @@ namespace MiniView.WebView2App
 
             windowShortcutButton.Click += delegate { BeginShortcutCapture("window"); };
             chromeShortcutButton.Click += delegate { BeginShortcutCapture("chrome"); };
+            miniShortcutButton.Click += delegate { BeginShortcutCapture("mini"); };
+            miniToggle.CheckedChanged += delegate
+            {
+                if (miniToggle.Checked == miniMode) return;
+                ToggleMiniMode();
+            };
             autoHideToggle.CheckedChanged += delegate
             {
                 if (autoHideToggle.Checked == settings.AutoHideEnabled) return;
@@ -581,9 +589,11 @@ namespace MiniView.WebView2App
             chromeHotkey = ParseShortcut(settings.ChromeShortcut, Keys.B);
             muteHotkey = ParseShortcut(settings.MuteShortcut, Keys.M);
             immersiveHotkey = ParseShortcut(settings.ImmersiveShortcut, Keys.F);
+            miniHotkey = ParseShortcut(settings.MiniShortcut, Keys.S);
             TopMost = settings.AlwaysOnTop;
             if (webViewReady) webView.CoreWebView2.IsMuted = settings.Muted;
             liveLandscapeApplied = false;
+            miniMode = false;
             MinimumSize = new Size(280, 460);
             ApplyChromeState(false);
             SetBoundsProgrammatically(WindowRules.KeepOnScreen(null, 280, 460, WindowRules.DefaultSize));
@@ -651,17 +661,21 @@ namespace MiniView.WebView2App
             chromeShortcutButton.Text = ShortcutButtonText(chromeHotkey);
             muteShortcutButton.Text = ShortcutButtonText(muteHotkey);
             immersiveShortcutButton.Text = ShortcutButtonText(immersiveHotkey);
+            miniShortcutButton.Text = ShortcutButtonText(miniHotkey);
             windowShortcutButton.FaceColor = UiPalette.ShortcutFace;
             chromeShortcutButton.FaceColor = UiPalette.ShortcutFace;
             muteShortcutButton.FaceColor = UiPalette.ShortcutFace;
             immersiveShortcutButton.FaceColor = UiPalette.ShortcutFace;
+            miniShortcutButton.FaceColor = UiPalette.ShortcutFace;
             windowShortcutStatus.Text = ShortcutStatusText(windowHotkeyAvailable || !IsHandleCreated, windowHotkey);
             chromeShortcutStatus.Text = ShortcutStatusText(chromeHotkeyAvailable || !IsHandleCreated, chromeHotkey);
             muteShortcutStatus.Text = ShortcutStatusText(muteHotkeyAvailable || !IsHandleCreated, muteHotkey);
             immersiveShortcutStatus.Text = ShortcutStatusText(immersiveHotkeyAvailable || !IsHandleCreated, immersiveHotkey);
+            miniShortcutStatus.Text = ShortcutStatusText(miniHotkeyAvailable || !IsHandleCreated, miniHotkey);
             toolTip.SetToolTip(windowShortcutButton, "隐藏/显示程序" + FormatShortcut(windowHotkey) + "；" + ShortcutHint(windowHotkey));
             toolTip.SetToolTip(chromeShortcutButton, "隐藏/显示边框" + FormatShortcut(chromeHotkey) + "；" + ShortcutHint(chromeHotkey));
             toolTip.SetToolTip(muteShortcutButton, "静音/恢复声音" + FormatShortcut(muteHotkey) + "；" + ShortcutHint(muteHotkey));
+            toolTip.SetToolTip(miniShortcutButton, "迷你小窗" + FormatShortcut(miniHotkey) + "；" + ShortcutHint(miniHotkey));
             autoHideToggle.Checked = settings.AutoHideEnabled;
             autoHideToggle.Enabled = windowHotkeyAvailable || !IsHandleCreated;
             bool delayRowVisible = (settings.AutoHideEnabled && windowHotkeyAvailable) || !IsHandleCreated;
@@ -687,6 +701,8 @@ namespace MiniView.WebView2App
             immersiveToggle.Checked = settings.ImmersiveMode;
             immersiveStatus.Text = pageStyleFallback ? "布局异常，已回退；可点击重新应用" : settings.ImmersiveMode
                 ? "隐藏页面装饰，保留原生播放器" : "已关闭";
+            miniToggle.Checked = miniMode;
+            miniStatus.Text = miniMode ? "已启用；再次点击或按快捷键退出" : "点击开关或按快捷键进入";
             LayoutSettingsPanel();
             UpdateToolbarState();
         }

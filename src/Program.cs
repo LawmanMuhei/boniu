@@ -132,6 +132,24 @@ namespace MiniView.WebView2App
             failures += Check(WindowRules.IsLiveUrl("https://www.douyin.com/live/123"), "识别直播路径");
             failures += Check(Math.Abs(WindowRules.CalculateZoomFactor(280) - 0.44) < 0.001, "最小缩放");
             failures += Check(Math.Abs(WindowRules.CalculateZoomFactor(726) - 1.0) < 0.001, "正常缩放");
+            // 清爽模式顶部工具栏迟滞：贴顶 6px 内唤出，离开工具栏区域 44px 才收起，
+            // 上甩越过窗口上边缘也算贴顶（10ms 采样会跳过窄带）。
+            const int reveal = 6, keep = 44;
+            failures += Check(!WindowRules.ShouldRevealToolbar(200, 30, 420, false, reveal, keep), "顶部悬停：未唤出时中段不触发");
+            failures += Check(WindowRules.ShouldRevealToolbar(200, 6, 420, false, reveal, keep), "顶部悬停：贴顶触发带唤出");
+            failures += Check(WindowRules.ShouldRevealToolbar(200, 0, 420, false, reveal, keep), "顶部悬停：顶边唤出");
+            failures += Check(WindowRules.ShouldRevealToolbar(200, -20, 420, false, reveal, keep), "顶部悬停：上甩越过上边缘仍唤出");
+            failures += Check(!WindowRules.ShouldRevealToolbar(200, -60, 420, false, reveal, keep), "顶部悬停：离窗口上方过远不唤出");
+            failures += Check(WindowRules.ShouldRevealToolbar(200, 40, 420, true, reveal, keep), "顶部悬停：已唤出时在工具栏区域保持");
+            failures += Check(!WindowRules.ShouldRevealToolbar(200, 45, 420, true, reveal, keep), "顶部悬停：离开工具栏区域后收起");
+            failures += Check(!WindowRules.ShouldRevealToolbar(-5, 3, 420, false, reveal, keep)
+                && !WindowRules.ShouldRevealToolbar(430, 3, 420, true, reveal, keep), "顶部悬停：横向超出窗口不唤出也不保持");
+            // 悬停唤出的工具栏走浮层（不占布局高度），其余情况仍占位。
+            failures += Check(WindowRules.ShouldOverlayToolbar(true, false, false, true), "顶部悬停：清爽模式悬停唤出用浮层");
+            failures += Check(!WindowRules.ShouldOverlayToolbar(true, false, false, false), "顶部悬停：未唤出时不浮层");
+            failures += Check(!WindowRules.ShouldOverlayToolbar(false, false, false, true), "顶部悬停：正常模式工具栏仍占位");
+            failures += Check(!WindowRules.ShouldOverlayToolbar(true, true, false, true), "顶部悬停：彻底隐藏工具栏时不浮层");
+            failures += Check(!WindowRules.ShouldOverlayToolbar(true, false, true, true), "顶部悬停：设置页打开时工具栏仍占位");
             failures += Check(WindowRules.NormalizeAutoHideDelay(100) == 100, "支持 0.1 秒隐藏延迟");
             failures += Check(WindowRules.NormalizeAutoHideDelay(300) == 300, "支持 0.3 秒隐藏延迟");
             failures += Check(WindowRules.NormalizeAutoHideDelay(500) == 500, "支持 0.5 秒隐藏延迟");
@@ -162,6 +180,17 @@ namespace MiniView.WebView2App
             failures += Check(!HotkeyDefinition.TryParse("Alt+F4", out second), "拒绝系统快捷键");
             failures += Check(immersiveDefault != null && !immersiveDefault.ConflictsWith(first),
                 "清爽模式默认快捷键不与隐藏快捷键冲突");
+            HotkeyDefinition miniDefault;
+            failures += Check(HotkeyDefinition.TryParse(defaultSettings.MiniShortcut, out miniDefault)
+                && miniDefault.Serialize() == "Control+Alt+S", "迷你小窗默认快捷键为 Ctrl+Alt+S");
+            failures += Check(miniDefault != null && !miniDefault.ConflictsWith(first)
+                && !miniDefault.ConflictsWith(immersiveDefault), "迷你小窗默认快捷键不与其它快捷键冲突");
+            Rectangle corner = WindowRules.CalculateCornerBounds(
+                new Rectangle(0, 0, 1920, 1040), WindowRules.MiniSize, 16);
+            failures += Check(corner.Right == 1920 - 16 && corner.Bottom == 1040 - 16
+                && corner.Width == WindowRules.MiniSize.Width, "迷你小窗默认停靠屏幕右下角");
+            failures += Check(upgradedSettings.MiniShortcut == "Control+Alt+S" && !upgradedSettings.MiniMode,
+                "旧设置升级后保持迷你小窗默认值");
 
             Version parsedVersion;
             failures += Check(UpdateService.TryParseVersion("v1.7.0", out parsedVersion)
@@ -173,6 +202,12 @@ namespace MiniView.WebView2App
                 == "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", "解析 SHA-256 校验文件");
             failures += Check(UpdateService.GetExecutableAssetName(8) == "BoniuMoyu.exe", "64 位程序选择 x64 更新资产");
             failures += Check(UpdateService.GetExecutableAssetName(4) == "BoniuMoyu-x86.exe", "32 位程序选择 x86 更新资产");
+            failures += Check(UpdateService.IsTrustedDownloadHost("github.com")
+                && UpdateService.IsTrustedDownloadHost("GITHUB.COM")
+                && UpdateService.IsTrustedDownloadHost("objects.githubusercontent.com"), "更新下载只接受 GitHub 主机");
+            failures += Check(!UpdateService.IsTrustedDownloadHost("evilgithubusercontent.com")
+                && !UpdateService.IsTrustedDownloadHost("github.com.evil.example")
+                && !UpdateService.IsTrustedDownloadHost(""), "拒绝伪装成 GitHub 的主机");
 
             using (System.Drawing.Drawing2D.GraphicsPath degenerate =
                 UiPaint.RoundedPath(new RectangleF(0.5F, 0.5F, -4F, -3F), 8F))

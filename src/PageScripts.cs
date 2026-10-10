@@ -84,9 +84,10 @@ namespace MiniView.WebView2App
   st.setAttribute('data-immersive'," + (immersive ? "'1'" : "'0'") + @");
   var G='__boniuAlignGuard';
   if(window[G]){clearInterval(window[G]);window[G]=0;}
-  // 无侵入健康检查：只确认视口中心仍有正在渲染的 video 覆盖；不 resize、不改播放器定位。
-  // 判定不依赖 feed-active-video 标记：推荐流是虚拟列表，滚动时该标记会被回收或改写，
-  // 标记缺失不等于布局异常。滚动/滚轮/触摸期间失败计数清零，切换过渡帧不会被累计。
+  // 无侵入健康检查：只确认视口内仍有足够大的、正在渲染的 video；不 resize、不改播放器定位。
+  // 判定不依赖 feed-active-video 标记，也不要求画面覆盖视口中心：推荐流是虚拟列表，滚动时
+  // 该标记会被回收；打开评论面板时抖音会缩小播放器或让它让出空间，画面仍完整可用，
+  // 只是不再居中，用中心点判定会把抖音自己的交互面板误判成布局损坏。
   var H='__boniuImmersiveHealthGuard';
   var HK='__boniuImmersiveHealthHooks';
   var healthEvents=['scroll','wheel','touchmove'];
@@ -97,11 +98,35 @@ namespace MiniView.WebView2App
   stopHealthGuard();
   if(" + (immersive ? "true" : "false") + @"){
     var misses=0;
-    var coversCenter=function(el){
-      if(!el)return false;
-      var r=el.getBoundingClientRect(),cs=getComputedStyle(el);
-      return cs.display!=='none'&&cs.visibility!=='hidden'&&r.width>innerWidth*.4&&r.height>innerHeight*.4&&
-        r.left<=innerWidth/2&&r.right>=innerWidth/2&&r.top<=innerHeight/2&&r.bottom>=innerHeight/2;
+    // 健康标准是“可见画面占视口的比例”，不是“画面是否覆盖中心”。窗口默认只有 420x760，
+    // 评论面板一展开播放器就会被推离中心甚至压窄，而真实损坏（被压成窄条、移出视口）比例接近 0。
+    var MIN_VISIBLE_RATIO=0.25;
+    var visibleRatio=function(el){
+      if(!el)return 0;
+      var cs=getComputedStyle(el);
+      if(cs.display==='none'||cs.visibility==='hidden')return 0;
+      var r=el.getBoundingClientRect();
+      if(r.width<=0||r.height<=0)return 0;
+      var left=Math.max(0,r.left),top=Math.max(0,r.top);
+      var right=Math.min(innerWidth,r.right),bottom=Math.min(innerHeight,r.bottom);
+      if(right<=left||bottom<=top)return 0;
+      return ((right-left)*(bottom-top))/(innerWidth*innerHeight);
+    };
+    // 抖音自己的评论面板展开时会重排播放器，这是页面交互而不是注入样式损坏：命中即清零计数。
+    // 面板本身必须是一块可见的大区域，避免把列表里的单个评论项当成面板。
+    var overlaySelectors=['[data-e2e=""comment-list""]','[data-e2e=""comment-panel""]','[data-e2e=""video-comment""]',
+      '[class*=""commentPanel""]','[class*=""comment-panel""]','[class*=""CommentPanel""]','[class*=""commentContainer""]'];
+    var overlayOpen=function(){
+      for(var i=0;i<overlaySelectors.length;i++){
+        var nodes=document.querySelectorAll(overlaySelectors[i]);
+        for(var j=0;j<nodes.length;j++){
+          var cs=getComputedStyle(nodes[j]);
+          if(cs.display==='none'||cs.visibility==='hidden'||cs.opacity==='0')continue;
+          var r=nodes[j].getBoundingClientRect();
+          if(r.width>innerWidth*.25&&r.height>innerHeight*.4)return true;
+        }
+      }
+      return false;
     };
     var reset=function(){misses=0;};
     healthEvents.forEach(function(e){addEventListener(e,reset,true);});
@@ -111,22 +136,27 @@ namespace MiniView.WebView2App
       if(!s||s.getAttribute('data-immersive')!=='1'){stopHealthGuard();return;}
       var videos=document.querySelectorAll('video');
       if(!videos.length)return;
-      // 任意一个正在渲染的 video 覆盖视口中心即视为健康：推荐页主播放器、视频详情页
-      // 播放器、从设置返回后的首帧都满足；只有“有 video 在渲染但无一覆盖中心”才计数。
-      var ok=false,rendering=false;
+      // 取所有正在渲染的 video 里最大的可见比例：推荐页主播放器、视频详情页播放器、
+      // 从设置返回后的首帧都满足；只有画面确实被压坏时比例才会掉到阈值以下。
+      var best=0,rendering=false;
       for(var i=0;i<videos.length;i++){
         var box=videos[i].getBoundingClientRect(),style=getComputedStyle(videos[i]);
         if(style.display==='none'||style.visibility==='hidden'||box.width<=0||box.height<=0)continue;
         rendering=true;
-        if(coversCenter(videos[i])){ok=true;break;}
+        var ratio=visibleRatio(videos[i]);
+        if(ratio>best)best=ratio;
+        if(best>=MIN_VISIBLE_RATIO)break;
       }
       if(!rendering)return;
-      misses=ok?0:misses+1;
+      if(overlayOpen()){misses=0;return;}
+      misses=best>=MIN_VISIBLE_RATIO?0:misses+1;
       // 连续 3 次（约 4.5 秒）异常才判定布局损坏，给滚动与视频切换留足过渡时间。
       if(misses<3)return;
       s.textContent='';s.setAttribute('data-fallback','1');
       stopHealthGuard();
-      try{window.chrome.webview.postMessage('boniu:immersive-fallback:'+revision);}catch(e){}
+      // 带上实测值：真实页面再出现误回退时，run.log 能直接说明当时的画面比例与视口尺寸。
+      try{window.chrome.webview.postMessage('boniu:immersive-fallback:'+revision+'|best='+best.toFixed(2)
+        +' vw='+innerWidth+' vh='+innerHeight+' videos='+videos.length);}catch(e){}
     },1500);
   }
 })()";

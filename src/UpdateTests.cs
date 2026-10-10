@@ -22,7 +22,7 @@ namespace MiniView.WebView2App
                 byte[] payload = Encoding.UTF8.GetBytes("fixture executable bytes; never launched");
                 string hash;
                 using (SHA256 sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(payload)).Replace("-", "").ToLowerInvariant();
-                UpdateInfo info = new UpdateInfo { Version = new Version(9, 0, 0), AssetUrl = "https://fixture.invalid/app", HashUrl = "https://fixture.invalid/hash" };
+                UpdateInfo info = new UpdateInfo { Version = new Version(9, 0, 0), AssetUrl = "https://github.com/app", HashUrl = "https://github.com/hash" };
                 using (UpdateService service = new UpdateService(root, new FixtureHandler(payload, hash, "ok")))
                 {
                     PreparedUpdate prepared = service.DownloadAsync(info).GetAwaiter().GetResult();
@@ -47,9 +47,22 @@ namespace MiniView.WebView2App
                     failures += check(release != null && release.Version == new Version(99, 0, 0)
                         && release.AssetUrl.EndsWith(UpdateService.GetExecutableAssetName(IntPtr.Size)), "Release 选择当前架构资产");
                 }
-                info.AssetUrl = "http://fixture.invalid/app";
+                info.AssetUrl = "http://github.com/app";
                 using (UpdateService service = new UpdateService(root, new FixtureHandler(payload, hash, "offline")))
                     failures += check(Throws<InvalidDataException>(delegate { service.DownloadAsync(info).GetAwaiter().GetResult(); }), "更新拒绝非 HTTPS 地址");
+                // The fixture host is unreachable in these modes, so only the address check can
+                // produce InvalidDataException: reaching the handler first would surface as
+                // HttpRequestException instead and fail the check.
+                info.AssetUrl = "https://evil.example/app";
+                using (UpdateService service = new UpdateService(root, new FixtureHandler(payload, hash, "offline")))
+                    failures += check(Throws<InvalidDataException>(delegate { service.DownloadAsync(info).GetAwaiter().GetResult(); }), "更新拒绝非 GitHub 下载主机");
+                info.AssetUrl = "https://evilgithubusercontent.com/app";
+                using (UpdateService service = new UpdateService(root, new FixtureHandler(payload, hash, "offline")))
+                    failures += check(Throws<InvalidDataException>(delegate { service.DownloadAsync(info).GetAwaiter().GetResult(); }), "更新拒绝伪装 GitHub 的下载主机");
+                info.AssetUrl = "https://github.com/app";
+                info.HashUrl = "https://evil.example/hash";
+                using (UpdateService service = new UpdateService(root, new FixtureHandler(payload, hash, "offline")))
+                    failures += check(Throws<InvalidDataException>(delegate { service.DownloadAsync(info).GetAwaiter().GetResult(); }), "更新拒绝非 GitHub 校验文件主机");
                 failures += check(UpdateService.ExtractSha256(new string('a', 65)) == null, "拒绝超过 64 位的伪哈希");
                 failures += check(UpdateService.ExtractSha256("prefix " + hash) == null, "拒绝从任意文本中截取哈希");
                 failures += check(FailureMessages.ForUpdate(new UnauthorizedAccessException()).Contains("权限"), "目录权限错误有可操作提示");
@@ -117,8 +130,8 @@ namespace MiniView.WebView2App
                 {
                     string asset = UpdateService.GetExecutableAssetName(IntPtr.Size);
                     response.Content = new StringContent("{\"tag_name\":\"v99.0.0\",\"assets\":[{\"name\":\"" + asset
-                        + "\",\"browser_download_url\":\"https://fixture.invalid/" + asset
-                        + "\"},{\"name\":\"" + asset + ".sha256\",\"browser_download_url\":\"https://fixture.invalid/hash\"}]}");
+                        + "\",\"browser_download_url\":\"https://github.com/" + asset
+                        + "\"},{\"name\":\"" + asset + ".sha256\",\"browser_download_url\":\"https://github.com/hash\"}]}");
                 }
                 else if (request.RequestUri.AbsolutePath == "/hash") response.Content = new StringContent(hash + "  app.exe");
                 else if (mode == "interrupted") response.Content = new StreamContent(new InterruptedStream(payload));

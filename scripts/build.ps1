@@ -32,6 +32,10 @@ $buildRoot = Join-Path $outputBase ("build\" + $Platform)
 $payloadRoot = Join-Path $buildRoot ("payload-" + $Platform)
 $distRoot = Join-Path $outputBase 'dist'
 $packageVersion = '1.0.4191.47'
+# Pinning the version alone still lets a drifted or compromised feed serve different bytes
+# under the same version, so the archive is verified before anything is extracted from it.
+# Update this value deliberately, together with $packageVersion.
+$packageSha256 = 'f492bbf547d0da329553b6727435b677579b1e9f91cc9e4a1ad029366d5f23d0'
 $packagesRoot = Join-Path $projectRoot '.packages'
 $packageRoot = Join-Path $packagesRoot "Microsoft.Web.WebView2.$packageVersion"
 $packageFile = Join-Path $packagesRoot "Microsoft.Web.WebView2.$packageVersion.nupkg"
@@ -66,6 +70,17 @@ function Invoke-CodeSign([string]$FilePath) {
     if ($signature.Status -ne 'Valid') { throw "Signature verification failed: $($signature.Status)" }
 }
 
+function Assert-PackageArchive([string]$FilePath) {
+    if (-not (Test-Path -LiteralPath $FilePath)) {
+        throw "WebView2 $packageVersion archive is missing: $FilePath"
+    }
+    $actual = (Get-FileHash -LiteralPath $FilePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $packageSha256) {
+        throw "WebView2 $packageVersion archive failed SHA-256 verification: expected $packageSha256 but found $actual. Delete '$FilePath' and rebuild to download it again."
+    }
+    Write-Host "WebView2 $packageVersion archive SHA-256 verified."
+}
+
 if (-not (Test-Path -LiteralPath $compiler)) {
     throw '.NET Framework 4.x C# compiler was not found.'
 }
@@ -76,8 +91,13 @@ if (-not (Test-Path -LiteralPath $packageRoot)) {
         $packageUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/$packageVersion/microsoft.web.webview2.$packageVersion.nupkg"
         Invoke-WebRequest -Uri $packageUrl -OutFile $packageFile -TimeoutSec 120
     }
+    Assert-PackageArchive -FilePath $packageFile
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [System.IO.Compression.ZipFile]::ExtractToDirectory($packageFile, $packageRoot)
+} elseif (Test-Path -LiteralPath $packageFile) {
+    # The extracted tree is reused across builds; a cached archive that no longer matches the
+    # pin is still reported instead of being trusted silently.
+    Assert-PackageArchive -FilePath $packageFile
 }
 
 if (Test-Path -LiteralPath $buildRoot) {

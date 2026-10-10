@@ -100,6 +100,7 @@ namespace MiniView.WebView2App
         {
             if (target == "window") return windowShortcutButton;
             if (target == "chrome") return chromeShortcutButton;
+            if (target == "mini") return miniShortcutButton;
             return target == "mute" ? muteShortcutButton : immersiveShortcutButton;
         }
 
@@ -107,6 +108,7 @@ namespace MiniView.WebView2App
         {
             if (target == "window") return windowShortcutStatus;
             if (target == "chrome") return chromeShortcutStatus;
+            if (target == "mini") return miniShortcutStatus;
             return target == "mute" ? muteShortcutStatus : immersiveShortcutStatus;
         }
 
@@ -114,6 +116,7 @@ namespace MiniView.WebView2App
         {
             if (target == "window") return HotkeyWindow;
             if (target == "chrome") return HotkeyChrome;
+            if (target == "mini") return HotkeyMini;
             return target == "mute" ? HotkeyMute : HotkeyImmersive;
         }
 
@@ -121,6 +124,7 @@ namespace MiniView.WebView2App
         {
             if (target == "window") return windowHotkey;
             if (target == "chrome") return chromeHotkey;
+            if (target == "mini") return miniHotkey;
             return target == "mute" ? muteHotkey : immersiveHotkey;
         }
 
@@ -128,6 +132,7 @@ namespace MiniView.WebView2App
         {
             if (target == "window") windowHotkeyAvailable = available;
             else if (target == "chrome") chromeHotkeyAvailable = available;
+            else if (target == "mini") miniHotkeyAvailable = available;
             else if (target == "mute") muteHotkeyAvailable = available;
             else immersiveHotkeyAvailable = available;
         }
@@ -137,13 +142,14 @@ namespace MiniView.WebView2App
             string value = definition == null ? "" : definition.Serialize();
             if (target == "window") settings.HideShortcut = value;
             else if (target == "chrome") settings.ChromeShortcut = value;
+            else if (target == "mini") settings.MiniShortcut = value;
             else if (target == "mute") settings.MuteShortcut = value;
             else settings.ImmersiveShortcut = value;
         }
 
         private bool ConflictsWithAnyRegistered(string target, HotkeyDefinition candidate)
         {
-            string[] others = { "window", "chrome", "mute", "immersive" };
+            string[] others = { "window", "chrome", "mute", "immersive", "mini" };
             foreach (string other in others)
             {
                 if (other == target) continue;
@@ -195,6 +201,7 @@ namespace MiniView.WebView2App
             chromeHotkeyAvailable = RegisterHotkey(HotkeyChrome, chromeHotkey);
             muteHotkeyAvailable = RegisterHotkey(HotkeyMute, muteHotkey);
             immersiveHotkeyAvailable = RegisterHotkey(HotkeyImmersive, immersiveHotkey);
+            miniHotkeyAvailable = RegisterHotkey(HotkeyMini, miniHotkey);
             UpdateRecoveryTray();
             string warnings = "";
             if (windowHotkey != null && !windowHotkeyAvailable)
@@ -208,6 +215,8 @@ namespace MiniView.WebView2App
                 warnings += muteHotkey.Display() + " 已被占用：静音键本次不可用，请在设置中更换快捷键。 ";
             if (immersiveHotkey != null && !immersiveHotkeyAvailable)
                 warnings += immersiveHotkey.Display() + " 已被占用：清爽模式本次不可用，请在设置中更换快捷键。 ";
+            if (miniHotkey != null && !miniHotkeyAvailable)
+                warnings += miniHotkey.Display() + " 已被占用：迷你小窗本次不可用，请在设置中更换快捷键。 ";
             if (warnings.Length > 0) ShowTransientNotice(warnings.Trim());
             UpdateSettingsUi();
         }
@@ -232,6 +241,7 @@ namespace MiniView.WebView2App
             NativeMethods.UnregisterHotKey(Handle, HotkeyChrome);
             NativeMethods.UnregisterHotKey(Handle, HotkeyMute);
             NativeMethods.UnregisterHotKey(Handle, HotkeyImmersive);
+            NativeMethods.UnregisterHotKey(Handle, HotkeyMini);
         }
 
     }

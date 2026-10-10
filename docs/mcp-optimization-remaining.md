@@ -21,8 +21,8 @@
 ## C. 安全与供应链
 
 - 代码签名缺失（已知）。SHA-256 sidecar 与 EXE 同信道发布，信道被攻破可同时替换。拿到证书前可考虑内嵌公钥（minisign/ed25519）独立验签；拿到后走 BONIU_SIGN_* 流程（已就绪）。
-- [已核实] UpdateService.EnsureHttps 只校验 scheme。建议追加 host 白名单（github.com、objects.githubusercontent.com、*.githubusercontent.com），防止 API 响应被引向任意 HTTPS 主机。
-- [已核实] build.ps1 构建期从 nuget.org 下载 WebView2 nupkg（已钉版本 1.0.4191.47）但不校验哈希。建议写入该 nupkg 的期望 SHA-256 并校验后解压，防供应链漂移。
+- [已实施 2026-10-10] UpdateService 下载地址改为只接受 github.com 与 *.githubusercontent.com；带点后缀匹配，拒绝 evilgithubusercontent.com 一类伪装主机，AssetUrl 与 HashUrl 都检查。详见 docs/mcp-update-supply-chain-hardening.md。
+- [已实施 2026-10-10] build.ps1 解压前校验 WebView2 nupkg 的 SHA-256（1.0.4191.47 对应 f492bbf5…f23d0），缓存存在时也校验，不匹配即报错。
 - 子框架导航未设防：仅顶层 OnNavigationStarting 守卫。iframe 内非抖音内容风险低（沙箱 + 新窗口已拦），可选 FrameNavigationStarting 做防御性拦截，或在 docs 声明接受该风险。
 - 已核实无需改动：IsDouyinUrl 伪造域识别、权限全拒、下载取消、限长下载（50MB/4KB hash）、哈希首字段解析、健康探针 token 校验。
 
@@ -52,7 +52,7 @@
 
 ## G. 构建与发布
 
-- publish.ps1 直接 gh release create，无 dry-run。建议加 -WhatIf 只打印将上传的资产与哈希。
+- [已实施 2026-10-10] publish.ps1 支持 -WhatIf：仍真实构建并生成 dist 资产，只打印目标 Release、资产、大小与哈希，不上传、不要求 gh。注意 $WhatIfPreference 会被 build.ps1 继承，本地构建阶段需显式置 false 再恢复。
 - 签名时间戳仅 digicert http 单点；可加备用 TSA。
 - 双名产物（波妞摸鱼.exe 与 BoniuMoyu.exe 拷贝）职责需在脚本注释中固化（内部名 vs 发布名）。
 

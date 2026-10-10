@@ -99,8 +99,8 @@ namespace MiniView.WebView2App
         {
             if (info == null || string.IsNullOrEmpty(info.AssetUrl) || string.IsNullOrEmpty(info.HashUrl))
                 throw new InvalidOperationException("此版本缺少 " + executableAssetName + " 或 SHA-256 校验文件，已取消更新。");
-            EnsureHttps(info.AssetUrl);
-            EnsureHttps(info.HashUrl);
+            EnsureTrustedDownloadUrl(info.AssetUrl);
+            EnsureTrustedDownloadUrl(info.HashUrl);
 
             if (info.Version == null) throw new InvalidDataException("更新版本号缺失。");
             using (CancellationTokenSource transfer = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token))
@@ -331,11 +331,27 @@ namespace MiniView.WebView2App
             }
         }
 
-        private static void EnsureHttps(string url)
+        // Both download addresses come from the Release API response, so an HTTPS scheme alone
+        // still lets a tampered or redirected response point the download at any host. Release
+        // assets are served by github.com and its GitHubusercontent CDN, and the redirects
+        // GitHub issues for them stay on those hosts; the initial address is what to constrain.
+        private static void EnsureTrustedDownloadUrl(string url)
         {
             Uri uri;
             if (!Uri.TryCreate(url, UriKind.Absolute, out uri) || uri.Scheme != Uri.UriSchemeHttps)
                 throw new InvalidDataException("更新地址不是安全的 HTTPS 地址。");
+            if (!IsTrustedDownloadHost(uri.Host))
+                throw new InvalidDataException("更新地址指向不受信任的主机：" + uri.Host);
+        }
+
+        // Exact host or a real subdomain: "evilgithubusercontent.com" does not end with the
+        // dotted suffix, so only hosts under githubusercontent.com are accepted.
+        internal static bool IsTrustedDownloadHost(string host)
+        {
+            if (string.IsNullOrWhiteSpace(host)) return false;
+            if (string.Equals(host, "github.com", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(host, "githubusercontent.com", StringComparison.OrdinalIgnoreCase)) return true;
+            return host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string PowerShellLiteral(string value)

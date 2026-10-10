@@ -88,6 +88,15 @@ namespace MiniView.WebView2App
                     await WaitForPageAsync("!document.getElementById('playing').paused");
                 }
                 AssertRegression(!pageStyleFallback, "healthy video switching does not trigger fallback");
+                // 打开评论面板时抖音会缩小或让出播放器空间，画面仍完整可用，不能判成布局损坏。
+                // 只缩小画面（无面板）靠可见面积判定通过；压到阈值以下时靠面板抑制通过。
+                await webView.ExecuteScriptAsync("document.getElementById('playing').style.width='45%'");
+                await Task.Delay(6000);
+                AssertRegression(!pageStyleFallback, "narrowed player does not trigger fallback");
+                await webView.ExecuteScriptAsync("window.openFixtureComments();document.getElementById('playing').style.width='20%'");
+                await Task.Delay(6000);
+                AssertRegression(!pageStyleFallback, "comment panel does not trigger fallback");
+                await webView.ExecuteScriptAsync("window.closeFixtureComments();document.getElementById('playing').style.width='100%'");
                 await webView.ExecuteScriptAsync("document.getElementById('playing').style.width='10px'");
                 await WaitForConditionAsync(delegate { return pageStyleFallback; }, "layout fallback message", 7000);
                 AssertRegression(pageNotice.Visible, "fallback notice visible outside settings");
@@ -291,6 +300,7 @@ namespace MiniView.WebView2App
             #douyin-header{position:absolute;top:0}#manual{display:none}
             </style></head><body><header id=""douyin-header"">fixture header</header>
             <div data-e2e=""feed-active-video""><video id=""playing"" muted playsinline></video></div>
+            <div id=""commentPanel"" data-e2e=""comment-list"" style=""display:none;position:absolute;right:0;top:0;width:70%;height:100%;background:#222;color:#fff"">fixture comments</div>
             <video id=""manual"" muted></video><script>
             const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;
             const ctx=canvas.getContext('2d');let frame=0;
@@ -301,6 +311,8 @@ namespace MiniView.WebView2App
             video.play().then(()=>window.fixtureReady=true);
             window.nextFixtureVideo=async()=>{const old=document.getElementById('playing');old.pause();
                 const next=old.cloneNode();next.srcObject=stream;old.replaceWith(next);await next.play();};
+            window.openFixtureComments=()=>{document.getElementById('commentPanel').style.display='block';};
+            window.closeFixtureComments=()=>{document.getElementById('commentPanel').style.display='none';};
             </script></body></html>";
     }
 }

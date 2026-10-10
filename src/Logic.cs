@@ -10,6 +10,9 @@ namespace MiniView.WebView2App
     internal static class WindowRules
     {
         internal static readonly Size DefaultSize = new Size(420, 760);
+        internal static readonly Size MiniSize = new Size(340, 600);
+        internal const int MiniMinWidth = 260;
+        internal const int MiniMinHeight = 300;
 
         internal static bool IsDouyinUrl(string rawUrl)
         {
@@ -41,6 +44,33 @@ namespace MiniView.WebView2App
         {
             int[] supported = { 100, 300, 500 };
             return supported.Contains(value) ? value : 100;
+        }
+
+        /// <summary>
+        /// 清爽模式顶部悬停是否显示工具栏。带迟滞：贴顶 revealHeight 以内唤出，已经唤出时
+        /// 光标留在 keepHeight 以内就保持，离开才收起——否则工具栏一弹出视频被推下去，
+        /// 指针往下移一点就立刻满足收起条件，会来回抖动且点不到按钮。
+        /// 光标略高于窗口上边缘（-keepHeight 到 0）也算贴顶：采样是 10ms 一次，鼠标上甩时
+        /// 两次采样之间可能跨过 20~40 像素，没有这条兜底就会整个跳过窄带、怎么甩都不出来。
+        /// 上限同样收在 keepHeight 内，避免鼠标停在窗口上方别的窗口上时工具栏一直挂着。
+        /// </summary>
+        internal static bool ShouldRevealToolbar(int cursorX, int cursorY, int clientWidth,
+            bool currentlyRevealed, int revealHeight, int keepHeight)
+        {
+            if (cursorX < 0 || cursorX > clientWidth) return false;
+            if (cursorY <= revealHeight && cursorY >= -keepHeight) return true;
+            return currentlyRevealed && cursorY <= keepHeight && cursorY >= -keepHeight;
+        }
+
+        /// <summary>
+        /// 顶部悬停临时唤出的工具栏是否以浮层覆盖在播放区上方（不占布局高度）。
+        /// 只有"清爽模式下工具栏本来收起、因为悬停才露出来"这一种情况算浮层：此时播放区
+        /// 在收起与唤出的两种状态下尺寸完全相同，视频不会被推下去，网页也不会收到 resize
+        /// 而重排。正常模式和设置页里的工具栏是常驻布局的一部分，仍然占位，避免长期盖住画面。
+        /// </summary>
+        internal static bool ShouldOverlayToolbar(bool immersive, bool chromeHidden, bool settingsOpen, bool revealed)
+        {
+            return immersive && !chromeHidden && !settingsOpen && revealed;
         }
 
         internal static Rectangle KeepOnScreen(BoundsData saved, int minWidth, int minHeight, Size fallback)
@@ -82,6 +112,17 @@ namespace MiniView.WebView2App
             int x = (int)Math.Round(Math.Max(workArea.Left, Math.Min(centerX - width / 2.0, workArea.Right - width)));
             int y = (int)Math.Round(Math.Max(workArea.Top, Math.Min(centerY - height / 2.0, workArea.Bottom - height)));
             return new Rectangle(x, y, width, height);
+        }
+
+        internal static Rectangle CalculateCornerBounds(Rectangle workArea, Size size, int margin)
+        {
+            int width = Math.Min(Math.Max(MiniMinWidth, size.Width), workArea.Width);
+            int height = Math.Min(Math.Max(MiniMinHeight, size.Height), workArea.Height);
+            return new Rectangle(
+                Math.Max(workArea.Left, workArea.Right - width - margin),
+                Math.Max(workArea.Top, workArea.Bottom - height - margin),
+                width,
+                height);
         }
     }
 

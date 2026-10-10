@@ -17,12 +17,12 @@
 
 ## 第二批：安全与性能
 
-1. 更新下载增加 GitHub 主机白名单，避免 Release API 把下载重定向到任意 HTTPS 主机。
-2. 构建脚本为固定版本 WebView2 NuGet 包校验预置 SHA-256。
+1. [已实施 2026-10-10] 更新下载增加 GitHub 主机白名单，避免 Release API 把下载重定向到任意 HTTPS 主机。
+2. [已实施 2026-10-10] 构建脚本为固定版本 WebView2 NuGet 包校验预置 SHA-256。
 3. 自动隐藏关闭时停止 10ms 光标轮询；随后评估 `TrackMouseEvent` 事件驱动，保留低频兜底而不是一次性重写。
 4. 清爽模式健康检查由永久 1.5 秒布局测量改为 `MutationObserver` 或稳定一段时间后停表。
 5. 直播状态从周期 `ExecuteScriptAsync` 逐步改为页面事件推送，减少 WebView IPC。
-6. 发布脚本增加 `-WhatIf`，只打印资产、架构、哈希和目标 Release，不执行上传。
+6. [已实施 2026-10-10] 发布脚本增加 `-WhatIf`，只打印资产、架构、哈希和目标 Release，不执行上传。
 
 ## 页面与可访问性
 

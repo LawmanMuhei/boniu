@@ -21,12 +21,16 @@ namespace MiniView.WebView2App
         private const int ToolbarButtonHeight = 28;
         private const int ToolbarButtonGap = 2;
         private const int ToolbarSidePadding = 6;
-        private const int ToolbarRevealHeight = 44;
+        // 清爽模式顶部悬停唤出工具栏：进入用很窄的贴顶触发带，退出要等光标离开整条工具栏区域，
+        // 中间靠迟滞衔接，避免弹出后视频被推下去、指针往下移一点就立刻收起造成抖动。
+        private const int ToolbarRevealHeight = 6;
+        private const int ToolbarKeepHeight = 44;
         private const int WindowCornerRadius = 10;
         private const int HotkeyWindow = 1;
         private const int HotkeyChrome = 2;
         private const int HotkeyMute = 3;
         private const int HotkeyImmersive = 4;
+        private const int HotkeyMini = 5;
         private const int ShowGraceMilliseconds = 2200;
         private const int WebViewSuspendDelayMilliseconds = 10000;
         private const int AutoHidePointerMargin = 18;
@@ -49,6 +53,7 @@ namespace MiniView.WebView2App
         private readonly RoundedButton closeButton;
         private readonly RoundedButton pinButton;
         private readonly RoundedButton muteButton;
+        private readonly RoundedButton miniButton;
         private readonly RoundedButton settingsButton;
         private readonly RoundedButton chromeButton;
         private readonly RoundedButton hideButton;
@@ -56,12 +61,14 @@ namespace MiniView.WebView2App
         private readonly RoundedButton chromeShortcutButton = CreateShortcutButton();
         private readonly RoundedButton immersiveShortcutButton = CreateShortcutButton();
         private readonly RoundedButton muteShortcutButton = CreateShortcutButton();
+        private readonly RoundedButton miniShortcutButton = CreateShortcutButton();
         private readonly Label headingLabel = new Label();
         private readonly Label brandLabel = new Label();
         private readonly Label windowShortcutStatus = CreateStatusLabel();
         private readonly Label chromeShortcutStatus = CreateStatusLabel();
         private readonly Label immersiveShortcutStatus = CreateStatusLabel();
         private readonly Label muteShortcutStatus = CreateStatusLabel();
+        private readonly Label miniShortcutStatus = CreateStatusLabel();
         private readonly Label autoHideStatus = CreateStatusLabel();
         private readonly Label inactiveHideStatus = CreateStatusLabel();
         private readonly Label liveStatus = CreateStatusLabel();
@@ -76,10 +83,12 @@ namespace MiniView.WebView2App
         private readonly ToggleSwitch topBarToggle = new ToggleSwitch();
         private readonly ToggleSwitch rightBarToggle = new ToggleSwitch();
         private readonly ToggleSwitch immersiveToggle = new ToggleSwitch();
+        private readonly ToggleSwitch miniToggle = new ToggleSwitch();
         private readonly Label leftNavStatus = CreateStatusLabel();
         private readonly Label topBarStatus = CreateStatusLabel();
         private readonly Label rightBarStatus = CreateStatusLabel();
         private readonly Label immersiveStatus = CreateStatusLabel();
+        private readonly Label miniStatus = CreateStatusLabel();
         private readonly SegmentedPicker autoHideDelayPicker = new SegmentedPicker();
         private readonly RoundedButton openDataButton = CreateSettingsActionButton("打开本地数据目录", false);
         private readonly RoundedButton resetSettingsButton = CreateSettingsActionButton("恢复程序默认设置", false);
@@ -117,14 +126,17 @@ namespace MiniView.WebView2App
         private HotkeyDefinition chromeHotkey;
         private HotkeyDefinition immersiveHotkey;
         private HotkeyDefinition muteHotkey;
+        private HotkeyDefinition miniHotkey;
         private bool windowHotkeyAvailable;
         private bool chromeHotkeyAvailable;
         private bool immersiveHotkeyAvailable;
         private bool muteHotkeyAvailable;
+        private bool miniHotkeyAvailable;
         private bool settingsOpen;
         private bool toolbarRevealed;
         private bool currentIsLive;
         private bool liveLandscapeApplied;
+        private bool miniMode;
         private bool liveDetectionPending;
         private bool isQuitting;
         private bool changingBounds;
@@ -166,12 +178,20 @@ namespace MiniView.WebView2App
             chromeHotkey = ParseShortcut(settings.ChromeShortcut, Keys.B);
             muteHotkey = ParseShortcut(settings.MuteShortcut, Keys.M);
             immersiveHotkey = ParseShortcut(settings.ImmersiveShortcut, Keys.F);
+            miniHotkey = ParseShortcut(settings.MiniShortcut, Keys.S);
 
             Text = "波妞摸鱼";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             Bounds = WindowRules.KeepOnScreen(settings.NormalBounds, 280, 460, WindowRules.DefaultSize);
             MinimumSize = new Size(280, 460);
+            if (settings.MiniMode)
+            {
+                miniMode = true;
+                MinimumSize = new Size(WindowRules.MiniMinWidth, WindowRules.MiniMinHeight);
+                Bounds = WindowRules.KeepOnScreen(settings.MiniBounds, WindowRules.MiniMinWidth,
+                    WindowRules.MiniMinHeight, WindowRules.MiniSize);
+            }
             BackColor = UiPalette.Shell;
             ForeColor = Color.FromArgb(244, 244, 245);
             ShowInTaskbar = false;
@@ -192,6 +212,7 @@ namespace MiniView.WebView2App
             reloadButton = CreateToolbarButton("\uE72C", "刷新", delegate { if (webViewReady) webView.Reload(); });
             pinButton = CreateToolbarButton("\uE718", "取消置顶", ToggleAlwaysOnTop);
             muteButton = CreateToolbarButton("\uE767", "静音", ToggleMute);
+            miniButton = CreateToolbarButton("\uE740", "迷你小窗", ToggleMiniMode);
             settingsButton = CreateToolbarButton("\uE713", "设置", ToggleSettings);
             chromeButton = CreateToolbarButton("\uE8A7", "隐藏边框", ToggleChrome);
             hideButton = CreateToolbarButton("\uE70D", "立即隐藏", HideWindowSafely);
@@ -210,10 +231,13 @@ namespace MiniView.WebView2App
             overflowBackItem.Click += delegate { NavigateBack(); };
             ToolStripMenuItem overflowReloadItem = new ToolStripMenuItem("刷新");
             overflowReloadItem.Click += delegate { if (webViewReady) webView.Reload(); };
+            ToolStripMenuItem overflowMiniItem = new ToolStripMenuItem("迷你小窗");
+            overflowMiniItem.Click += delegate { ToggleMiniMode(); };
             overflowMenu.Items.Add(overflowBackItem);
             overflowMenu.Items.Add(overflowReloadItem);
+            overflowMenu.Items.Add(overflowMiniItem);
 
-            RoundedButton[] buttons = { backButton, reloadButton, overflowButton, pinButton, muteButton, settingsButton, chromeButton, hideButton, closeButton };
+            RoundedButton[] buttons = { backButton, reloadButton, overflowButton, pinButton, muteButton, miniButton, settingsButton, chromeButton, hideButton, closeButton };
             foreach (RoundedButton button in buttons) toolbar.Controls.Add(button);
             toolbar.Controls.Add(statusDot);
 
@@ -257,7 +281,7 @@ namespace MiniView.WebView2App
             Shown += async delegate
             {
                 if (!IsTestMode) { InitializeRecoveryTray(); RegisterAllHotkeys(); }
-                else windowHotkeyAvailable = chromeHotkeyAvailable = muteHotkeyAvailable = immersiveHotkeyAvailable = true;
+                else windowHotkeyAvailable = chromeHotkeyAvailable = muteHotkeyAvailable = immersiveHotkeyAvailable = miniHotkeyAvailable = true;
                 ApplyChromeState(settings.ChromeHidden);
                 showGraceUntil = DateTime.UtcNow.AddMilliseconds(ShowGraceMilliseconds);
                 pointerTimer.Start();
@@ -403,6 +427,7 @@ namespace MiniView.WebView2App
                 else if (id == HotkeyChrome) ToggleChrome();
                 else if (id == HotkeyMute) ToggleMute();
                 else if (id == HotkeyImmersive) ToggleImmersiveMode();
+                else if (id == HotkeyMini) ToggleMiniMode();
                 return;
             }
 
@@ -515,11 +540,13 @@ namespace MiniView.WebView2App
             muteButton.Active = settings.Muted;
             settingsButton.Active = settingsOpen;
             hideButton.Enabled = CanRestoreWindow || !IsHandleCreated;
+            miniButton.Active = miniMode;
             chromeButton.Enabled = chromeHotkeyAvailable || !IsHandleCreated;
             toolTip.SetToolTip(pinButton, TopMost ? "取消置顶" : "始终置顶");
             toolTip.SetToolTip(muteButton, (settings.Muted ? "恢复声音" : "静音") + FormatShortcut(muteHotkey));
             toolTip.SetToolTip(hideButton, "立即隐藏" + FormatShortcut(windowHotkey));
             toolTip.SetToolTip(chromeButton, "隐藏边框" + FormatShortcut(chromeHotkey));
+            toolTip.SetToolTip(miniButton, (miniMode ? "退出迷你小窗" : "迷你小窗") + FormatShortcut(miniHotkey));
         }
 
         private void UpdateZoom()
@@ -531,10 +558,17 @@ namespace MiniView.WebView2App
         {
             Diagnostics.Mark("LayoutWindow enter");
             int toolbarHeight = ToolbarCollapsed ? 0 : Scaled(ToolbarHeight);
+            // 悬停唤出的工具栏是浮层：不占位，播放区尺寸与收起时完全一致，
+            // 视频不动、WebView 不重排。其余情况（正常模式、设置页）仍按原样占位。
+            bool overlay = ToolbarOverlay;
+            int reservedHeight = overlay ? 0 : toolbarHeight;
             toolbar.SetBounds(Padding.Left, Padding.Top, Math.Max(1, ClientSize.Width - Padding.Horizontal), toolbarHeight);
-            contentHost.SetBounds(Padding.Left, Padding.Top + toolbarHeight,
+            contentHost.SetBounds(Padding.Left, Padding.Top + reservedHeight,
                 Math.Max(1, ClientSize.Width - Padding.Horizontal),
-                Math.Max(1, ClientSize.Height - Padding.Vertical - toolbarHeight));
+                Math.Max(1, ClientSize.Height - Padding.Vertical - reservedHeight));
+            // webView 是 contentHost 的子窗口，子窗口盖不过父窗口的兄弟窗口，因此把工具栏
+            // 提到最前即可稳定压在画面之上。
+            if (overlay) toolbar.BringToFront();
             LayoutToolbarButtons(toolbarHeight);
             settingsPanel.Bounds = contentHost.ClientRectangle;
             pageNotice.SetBounds(Scaled(8), Scaled(8), Math.Max(1, contentHost.Width - Scaled(16)), Scaled(36));
@@ -554,17 +588,17 @@ namespace MiniView.WebView2App
             int available = right - sidePadding;
             int dotSpace = Scaled(12);
 
-            RoundedButton[] all = { backButton, reloadButton, overflowButton, pinButton, muteButton, settingsButton, chromeButton, hideButton, closeButton };
+            RoundedButton[] all = { backButton, reloadButton, overflowButton, pinButton, muteButton, miniButton, settingsButton, chromeButton, hideButton, closeButton };
             foreach (RoundedButton button in all) button.CornerRadius = radius;
 
             // 窄窗：后退/刷新收纳进「更多」溢出菜单；statusDot 让位，保证顶部留白可拖拽。
-            bool fold = 8 * buttonWidth + 7 * gap + dotSpace > available - Scaled(8);
+            bool fold = 9 * buttonWidth + 8 * gap + dotSpace > available - Scaled(8);
             backButton.Visible = !fold;
             reloadButton.Visible = !fold;
             overflowButton.Visible = fold;
             RoundedButton[] visible = fold
-                ? new RoundedButton[] { overflowButton, pinButton, muteButton, settingsButton, chromeButton, hideButton, closeButton }
-                : new RoundedButton[] { backButton, reloadButton, pinButton, muteButton, settingsButton, chromeButton, hideButton, closeButton };
+                ? new RoundedButton[] { overflowButton, pinButton, muteButton, miniButton, settingsButton, chromeButton, hideButton, closeButton }
+                : new RoundedButton[] { backButton, reloadButton, pinButton, muteButton, miniButton, settingsButton, chromeButton, hideButton, closeButton };
             int count = visible.Length;
             statusDot.Visible = !fold && count * buttonWidth + (count - 1) * gap + dotSpace <= available;
 

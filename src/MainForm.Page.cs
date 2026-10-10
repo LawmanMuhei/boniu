@@ -110,7 +110,8 @@ namespace MiniView.WebView2App
         private void RememberCurrentBounds()
         {
             if (changingBounds || WindowState != FormWindowState.Normal) return;
-            if (liveLandscapeApplied) settings.LiveBounds = BoundsData.FromRectangle(Bounds);
+            if (miniMode) settings.MiniBounds = BoundsData.FromRectangle(Bounds);
+            else if (liveLandscapeApplied) settings.LiveBounds = BoundsData.FromRectangle(Bounds);
             else settings.NormalBounds = BoundsData.FromRectangle(Bounds);
             ScheduleSettingsSave();
         }
@@ -122,9 +123,14 @@ namespace MiniView.WebView2App
             string message;
             try { message = e.TryGetWebMessageAsString(); }
             catch { return; }
-            if (message != "boniu:immersive-fallback:" + pageStyleRevision.ToString(System.Globalization.CultureInfo.InvariantCulture)) return;
+            // 守卫会带上实测画面比例；精确匹配 revision 前缀，过期代次的消息一律忽略。
+            string prefix = "boniu:immersive-fallback:" + pageStyleRevision.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string detail = string.Empty;
+            if (message == prefix) { }
+            else if (message.StartsWith(prefix + "|", StringComparison.Ordinal)) detail = message.Substring(prefix.Length + 1);
+            else return;
             pageStyleFallback = true;
-            Diagnostics.Log("immersive-health fallback-to-native-layout");
+            Diagnostics.Log("immersive-health fallback-to-native-layout " + detail);
             UpdateSettingsUi();
             RefreshPageNotice();
         }
@@ -197,15 +203,29 @@ namespace MiniView.WebView2App
             }
         }
 
+        // 顶部悬停临时唤出的工具栏以浮层盖在播放区上方，不占布局高度。这样播放区在
+        // "收起"和"唤出"两种状态下的尺寸完全相同：视频不会被推下去，网页也不会收到
+        // resize 而重排。正常模式和设置页里的工具栏是常驻布局的一部分，仍然占位。
+        private bool ToolbarOverlay
+        {
+            get
+            {
+                if (settings == null) return false;
+                return WindowRules.ShouldOverlayToolbar(
+                    settings.ImmersiveMode, settings.ChromeHidden, settingsOpen, toolbarRevealed);
+            }
+        }
+
         private void UpdateImmersiveToolbar()
         {
             if (!settings.ImmersiveMode || settings.ChromeHidden || !Visible) return;
             Point cursor = PointToClient(Cursor.Position);
-            bool nearTop = cursor.X >= 0 && cursor.X <= ClientSize.Width
-                && cursor.Y >= 0 && cursor.Y <= Scaled(ToolbarRevealHeight);
-            if (nearTop == toolbarRevealed) return;
-            toolbarRevealed = nearTop;
-            Diagnostics.Log("immersive-toolbar reveal=" + nearTop + " cursorY=" + cursor.Y);
+            bool next = WindowRules.ShouldRevealToolbar(
+                cursor.X, cursor.Y, ClientSize.Width, toolbarRevealed,
+                Scaled(ToolbarRevealHeight), Scaled(ToolbarKeepHeight));
+            if (next == toolbarRevealed) return;
+            toolbarRevealed = next;
+            Diagnostics.Log("immersive-toolbar reveal=" + next + " cursorY=" + cursor.Y);
             LayoutWindow();
         }
 

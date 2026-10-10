@@ -214,6 +214,75 @@ namespace MiniView.WebView2App
             else ShowWindow();
         }
 
+        private void ToggleMiniMode()
+        {
+            if (miniMode) ExitMiniMode();
+            else EnterMiniMode();
+        }
+
+        private void EnterMiniMode()
+        {
+            if (miniMode) return;
+            if (settingsOpen) ToggleSettings();
+            miniMode = true;
+            settings.MiniMode = true;
+            // 保留主形态尺寸：直播横屏时先写回直播尺寸，普通形态直接写入主尺寸。
+            if (liveLandscapeApplied)
+            {
+                settings.LiveBounds = BoundsData.FromRectangle(Bounds);
+                liveLandscapeApplied = false;
+            }
+            else
+            {
+                settings.NormalBounds = BoundsData.FromRectangle(Bounds);
+            }
+            MinimumSize = new Size(WindowRules.MiniMinWidth, WindowRules.MiniMinHeight);
+            Rectangle workArea = Screen.FromRectangle(Bounds).WorkingArea;
+            Rectangle target = settings.MiniBounds == null
+                ? WindowRules.CalculateCornerBounds(workArea, WindowRules.MiniSize, Scaled(16))
+                : WindowRules.KeepOnScreen(settings.MiniBounds, WindowRules.MiniMinWidth,
+                    WindowRules.MiniMinHeight, WindowRules.MiniSize);
+            SetBoundsProgrammatically(target);
+            settings.MiniBounds = BoundsData.FromRectangle(Bounds);
+            Diagnostics.Log("mini enter bounds=" + Bounds);
+            ScheduleSettingsSave();
+            LayoutWindow();
+            UpdateZoom();
+            UpdateToolbarState();
+            UpdateSettingsUi();
+            ShowTransientNotice("已进入迷你小窗，再按一次" + FormatShortcut(miniHotkey) + "或点击工具栏按钮恢复");
+        }
+
+        private void ExitMiniMode()
+        {
+            if (!miniMode) return;
+            miniMode = false;
+            settings.MiniMode = false;
+            settings.MiniBounds = BoundsData.FromRectangle(Bounds);
+            MinimumSize = new Size(280, 460);
+            Rectangle workArea = Screen.FromRectangle(Bounds).WorkingArea;
+            Rectangle target;
+            bool restoreLandscape = currentIsLive && settings.AutoLandscapeLive;
+            if (restoreLandscape)
+            {
+                target = settings.LiveBounds == null
+                    ? WindowRules.CalculateLandscapeBounds(Bounds, workArea)
+                    : WindowRules.KeepOnScreen(settings.LiveBounds, 640, 360, new Size(800, 450));
+            }
+            else
+            {
+                target = WindowRules.KeepOnScreen(settings.NormalBounds, 280, 460, WindowRules.DefaultSize);
+            }
+            SetBoundsProgrammatically(target);
+            liveLandscapeApplied = restoreLandscape;
+            Diagnostics.Log("mini exit bounds=" + Bounds);
+            ScheduleSettingsSave();
+            LayoutWindow();
+            UpdateZoom();
+            UpdateToolbarState();
+            UpdateSettingsUi();
+        }
+
         private void ToggleAlwaysOnTop()
         {
             TopMost = !TopMost;
