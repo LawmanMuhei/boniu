@@ -61,7 +61,8 @@
 ## 注意事项
 
 - 版本口径已统一为 1.10.1：src/AppVersion.cs 为唯一来源，app.manifest 为 1.10.1.0，使用说明与 README 由 scripts/check-version.ps1 在构建前核对。
-- v1.10.1 已发布（拖动吸附 + 贴边判定修复）；v1.10.0 是贴边自动隐藏；v1.9.0 发布于 2026-10-10（迷你小窗 + 评论面板误回退修复 + 工具栏迟滞与浮层 + 更新供应链加固）。发布用 REST API 完成（本机未装 gh）：先建草稿、传完资产再公开，中途失败只会留下草稿。
+- v1.10.1 已发布：源码在 main（工作提交 beeaa19d + 版本提交 4fadeb8d），Release `v1.10.1` 为 latest、含 8 个资产，其中 4 个自动更新资产带显示标签。x64 sha256 13c17008…（1200640 字节），x86 12cc13d8…（1162752 字节）。v1.10.0 是贴边自动隐藏；v1.9.0 发布于 2026-10-10（迷你小窗 + 评论面板误回退修复 + 工具栏迟滞与浮层 + 更新供应链加固）。发布用 REST API 完成（本机未装 gh）：先建草稿、传完资产再公开，中途失败只会留下草稿。
+- **本次推送绕开了 git 协议**：github.com:443 当时连不上（`Recv failure: Connection was reset`、`Failed to connect ... after 21s`，四次重试全败），但 api.github.com 通。于是改用 GitHub 的 Git Data API 直接写提交：`POST /git/blobs` → `POST /git/trees`（带 `base_tree` 继承未改动的文件）→ `POST /git/commits` → `PATCH /git/refs/heads/main`。产出的就是普通 git 提交，之后用 git 拉取完全正常。**下次遇到 git 推不上而 API 能通时可以直接复用这条路子**（同时证明了两条链路在国内网络下是分别可达的，这正是要接 Gitee 更新源的现实依据）。
 - **贴边判定曾有一个真实缺陷**：原来用距离绝对值，窗口冲过屏幕边缘超过阈值就被判成"没贴边"，既不收起也唤不回。触发条件很常见——窗口右边缘 = 光标 + (窗宽 − 抓取点)，抓标题栏中间拖到屏幕最右边，窗口会超出光标半个窗宽，判定必然落空。现已改成"贴到或越过都算"。
 - **拖动吸附走 `WM_MOVING`**：拖动是原生移动循环（`DragWindow` 里 `ReleaseCapture` + `WM_NCLBUTTONDOWN/HTCAPTION`），系统在循环中发这条消息并把"提案矩形"交给程序改。不要改成自己接管拖动，也不要在 `Move` 事件里回写位置（会和模态循环打架、抖动）。`run.log` 里的 `edge-snap proposed=… snapped=…` 可确认吸附是否真的生效（一次拖动只记一条）。
 - 贴边判定同时挂在 `ResizeEnd` 与 `WM_EXITSIZEMOVE` 上：WinForms 的 `ResizeEnd` 本就由这条消息派发，只依赖事件一旦漏发整条功能会静默失效；两处都调用是无害的，判定幂等。`run.log` 里的 `edge-dock evaluate side=…` 可直接判断"拖到边缘却没有收起"。
@@ -84,7 +85,8 @@
 - `scripts\check-version.ps1`：Version consistency OK: 1.10.1。
 - `scripts\test.ps1 -Platform x64` 与 `-Platform x86`：各自 5 个用例（--self-test、--smoke-test、--live-smoke-test、--settings-smoke-test、--regression-test）全部 exit 0，无超时；自测 **121 项通过**，回归 **75/75 检查通过**（含 1.10.0 的 19 项贴边判定与 11 项贴边状态机/设置联动，以及 1.10.1 新增的 11 项吸附判定与 6 项 WM_MOVING/冲过边缘用例）。报告为 artifacts/verification/tests-x64.json、tests-x86.json、regression-x64.json、regression-x86.json 与 settings-x64.png、settings-x86.png。
 - **完整测试套件需要在非受限模式下运行**：受控沙箱允许在 `%TEMP%` 新建文件，但拒绝设置自测里的原子替换（`File.Replace`），会报 `SettingsStore.Save` 的 `UnauthorizedAccessException` 假失败。`-OutputRoot` 指向工作区根下新建目录可绕开 `artifacts`/`build`/`dist` 的写入限制，但绕不开这一条。
-- `scripts\publish.ps1 -Version 1.10.1 -WhatIf`：exit 0，未上传；已核对 dist 中波妞摸鱼.exe / BoniuMoyu.exe / BoniuMoyu-1.10.1-x64.exe 三者哈希一致，4 个 .sha256 与对应 EXE 全部匹配。
+- `scripts\publish.ps1 -Version 1.10.1 -WhatIf`：exit 0，未上传；已核对 dist 中波妞摸鱼.exe / BoniuMoyu.exe / BoniuMoyu-1.10.1-x64.exe 三者哈希一致（x64 13c17008…，x86 12cc13d8…），4 个 .sha256 与对应 EXE 全部匹配。
+- 推向远端后又独立复核过一次：把新提交的树递归取回，对全部 86 个 blob 逐个比对哈希（二进制按原始字节算，文本先归一 CRLF），**差异 0 个**——等于不克隆也完成了逐文件一致性验证。
 - **拖动吸附的"系统会不会真的发 `WM_MOVING`"未在真机确认**：自动化测试是把提案矩形自己塞进 `lParam` 发给窗口（走的是同一条消息通路），真人按住鼠标拖动这一步无法合成。贴边唤出同理依赖真实光标位置。两者的真机手感都需要人工验收，本轮未做。
 - 回归性能采样为隔离的合成 WebView2 夹具，**不代表真实抖音解码、网络和长期内存表现**，也不是修改前后的性能提升证明。
 - 真实页面、真实音频、多显示器迁移、系统锁屏、托盘交互及实际更新安装仍需按 docs/mcp-real-douyin-acceptance.md 人工验收；本轮未执行。**清爽模式评论面板误回退的修复同样只在合成夹具上验证过**，真实评论区交互需人工确认。
