@@ -127,6 +127,8 @@ namespace MiniView.WebView2App
         internal const int WM_HOTKEY = 0x0312;
         internal const int WM_ACTIVATEAPP = 0x001C;
         internal const int WM_NCHITTEST = 0x0084;
+        internal const int WM_ENTERSIZEMOVE = 0x0231;
+        internal const int WM_MOVING = 0x0216;
         internal const int WM_EXITSIZEMOVE = 0x0232;
         internal const int WM_NCLBUTTONDOWN = 0x00A1;
         internal const int HTCAPTION = 2;

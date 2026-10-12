@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -193,6 +194,25 @@ namespace MiniView.WebView2App
                 SetBoundsProgrammatically(new Rectangle(edgeWorkArea.Left + 200, Bounds.Top, Bounds.Width, Bounds.Height));
                 EvaluateEdgeDock();
                 AssertRegression(edgeDockSide == EdgeDockSide.None && Visible, "dragging away from the edge releases the dock");
+                // 拖动中越过屏幕边缘：WM_MOVING 必须把窗口拉回贴齐，不能让它待在屏幕外。
+                Rectangle probe = Bounds;
+                Rectangle flushLeft = new Rectangle(edgeWorkArea.Left, probe.Top, probe.Width, probe.Height);
+                Rectangle flushRight = new Rectangle(edgeWorkArea.Right - probe.Width, probe.Top, probe.Width, probe.Height);
+                AssertRegression(SendMovingProbe(new Rectangle(edgeWorkArea.Right + 300, probe.Top, probe.Width, probe.Height))
+                    == flushRight, "WM_MOVING snaps a window dragged past the right edge back flush");
+                AssertRegression(SendMovingProbe(new Rectangle(edgeWorkArea.Left - 300, probe.Top, probe.Width, probe.Height))
+                    == flushLeft, "WM_MOVING snaps a window dragged past the left edge back flush");
+                Rectangle awayFromEdges = new Rectangle(edgeWorkArea.Left + 400, probe.Top, probe.Width, probe.Height);
+                AssertRegression(SendMovingProbe(awayFromEdges) == awayFromEdges,
+                    "WM_MOVING leaves a window away from both edges alone");
+                // 冲过边缘超过阈值也必须收起：判定以前用绝对值，这种窗口会滞留在屏幕外且收不起来。
+                SetBoundsProgrammatically(new Rectangle(edgeWorkArea.Right + 300, probe.Top, probe.Width, probe.Height));
+                EvaluateEdgeDock();
+                AssertRegression(edgeDockSide == EdgeDockSide.Right && Bounds.Right == edgeWorkArea.Right,
+                    "releasing well past the right edge still docks flush");
+                AssertRegression(!Visible, "overshoot dock still hides the window");
+                ShowWindow();
+                AssertRegression(Visible && edgeDockSide == EdgeDockSide.None, "explicit show releases the overshoot dock");
                 settings.EdgeAutoHideEnabled = false;
                 settings.AutoHideEnabled = mouseLeaveBefore;
                 SetBoundsProgrammatically(boundsBeforeEdgeDock);
@@ -229,6 +249,32 @@ namespace MiniView.WebView2App
         {
             regressionResults.Add(new { name = name, passed = passed });
             if (!passed) throw new InvalidOperationException(name);
+        }
+
+        /// <summary>
+        /// 把提案矩形塞进 WM_MOVING 的 lParam 发给窗口，取回被处理后的矩形。真实拖动没法在自动化
+        /// 测试里合成，但"系统把提案位置交给程序改"这条通路可以这样完整地走一遍。
+        /// </summary>
+        private Rectangle SendMovingProbe(Rectangle proposed)
+        {
+            int size = Marshal.SizeOf(typeof(NativeMethods.NativeRectangle));
+            IntPtr buffer = Marshal.AllocHGlobal(size);
+            try
+            {
+                NativeMethods.NativeRectangle rect = new NativeMethods.NativeRectangle();
+                rect.Left = proposed.Left;
+                rect.Top = proposed.Top;
+                rect.Right = proposed.Right;
+                rect.Bottom = proposed.Bottom;
+                Marshal.StructureToPtr(rect, buffer, false);
+                NativeMethods.SendMessage(Handle, NativeMethods.WM_MOVING, IntPtr.Zero, buffer);
+                rect = (NativeMethods.NativeRectangle)Marshal.PtrToStructure(buffer, typeof(NativeMethods.NativeRectangle));
+                return Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
         }
 
         private async Task<bool> PageIsTrueAsync(string expression)

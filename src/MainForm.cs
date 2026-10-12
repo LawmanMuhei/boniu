@@ -441,6 +441,18 @@ namespace MiniView.WebView2App
                     BeginInvoke((MethodInvoker)HideWhenApplicationBecomesInactive);
             }
 
+            if (m.Msg == NativeMethods.WM_ENTERSIZEMOVE)
+            {
+                edgeSnapReported = false;
+            }
+
+            if (m.Msg == NativeMethods.WM_MOVING)
+            {
+                ApplyMovingSnap(ref m);
+                m.Result = (IntPtr)1;
+                return;
+            }
+
             if (m.Msg == NativeMethods.WM_EXITSIZEMOVE)
             {
                 base.WndProc(ref m);

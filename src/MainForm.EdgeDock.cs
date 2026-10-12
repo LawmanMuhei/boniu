@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace MiniView.WebView2App
@@ -17,6 +18,8 @@ namespace MiniView.WebView2App
         // 刚收起时光标还停在触发段上，必须先离开再回来才允许唤出，否则拖到边缘的瞬间就会弹回。
         private bool edgeDockRevealArmed;
         private DateTime? edgeDockLeaveSince;
+        // 一次拖动只记一条吸附日志，否则 WM_MOVING 每来一次都会刷屏。
+        private bool edgeSnapReported;
 
         private Rectangle EdgeDockRevealZone
         {
@@ -27,6 +30,33 @@ namespace MiniView.WebView2App
                     Screen.FromRectangle(edgeDockAnchor).WorkingArea, edgeDockSide,
                     Scaled(WindowRules.EdgeDockBand), Scaled(WindowRules.EdgeDockSpanPadding));
             }
+        }
+
+        /// <summary>
+        /// WM_MOVING：拖动过程中把左右两边吸到屏幕边缘，并挡住继续往屏幕外的方向。
+        /// 用这条消息而不是自己接管拖动，是因为系统把"提案位置矩形"直接交给了程序改——这正是
+        /// 留给移动时约束/吸附的口子，不必和原生移动循环抢控制权，也不会抖。lParam 是 RECT 指针。
+        /// </summary>
+        private void ApplyMovingSnap(ref Message m)
+        {
+            if (m.LParam == IntPtr.Zero) return;
+            NativeMethods.NativeRectangle rect =
+                (NativeMethods.NativeRectangle)Marshal.PtrToStructure(m.LParam, typeof(NativeMethods.NativeRectangle));
+            Rectangle proposed = Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
+            // 用"提案矩形所在的屏幕"而不是当前 Bounds 所在的屏幕：多显示器下后者会把窗口一直挡在
+            // 原来那台显示器上——那台显示器的边缘在桌面中间，并不是真正的桌面边缘。
+            Rectangle workArea = Screen.FromRectangle(proposed).WorkingArea;
+            Rectangle snapped = WindowRules.SnapSideEdges(proposed, Bounds, workArea,
+                Scaled(WindowRules.EdgeDockThreshold));
+            if (snapped == proposed) return;
+            rect.Left = snapped.Left;
+            rect.Top = snapped.Top;
+            rect.Right = snapped.Right;
+            rect.Bottom = snapped.Bottom;
+            Marshal.StructureToPtr(rect, m.LParam, false);
+            if (edgeSnapReported) return;
+            edgeSnapReported = true;
+            Diagnostics.Log("edge-snap proposed=" + proposed + " snapped=" + snapped);
         }
 
         /// <summary>拖动/缩放结束后调用：贴到左右边缘就吸附收起，否则解除贴边。</summary>

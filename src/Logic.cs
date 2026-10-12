@@ -149,19 +149,43 @@ namespace MiniView.WebView2App
         }
 
         /// <summary>
-        /// 拖动结束后判断窗口贴到了哪条屏幕边缘。距离用窗口边缘对工作区边缘算，
-        /// 超过阈值返回 None（窗口就停在原地，解除贴边）。
+        /// 拖动结束后判断窗口贴到了哪条屏幕边缘。"贴到"和"冲过头"都算：拖动时窗口右边缘 =
+        /// 光标位置 + (窗口宽度 − 抓标题栏的位置)，抓标题栏中间再往屏幕右边拖，窗口右边缘会比
+        /// 光标再多出半个窗宽，所以用绝对值判定时冲过头的窗口会被判成"没贴边"——既收不起也唤不回。
         /// </summary>
         internal static EdgeDockSide ResolveEdgeDockSide(Rectangle bounds, Rectangle workArea, int threshold)
         {
             int leftDistance = Math.Abs(bounds.Left - workArea.Left);
             int rightDistance = Math.Abs(bounds.Right - workArea.Right);
-            bool left = leftDistance <= threshold;
-            bool right = rightDistance <= threshold;
+            bool left = bounds.Left <= workArea.Left + threshold;
+            bool right = bounds.Right >= workArea.Right - threshold;
             if (left && right) return leftDistance <= rightDistance ? EdgeDockSide.Left : EdgeDockSide.Right;
             if (left) return EdgeDockSide.Left;
             if (right) return EdgeDockSide.Right;
             return EdgeDockSide.None;
+        }
+
+        /// <summary>
+        /// 拖动过程中的左右吸附：靠近屏幕边缘就贴齐过去，并且不允许继续往屏幕外的方向移动。
+        /// 只处理左右两侧（上下不做限制）。反向拖动一律立刻放手，不给"离开"再设一个阈值，
+        /// 否则窗口贴在边上时会先黏住一小段才肯跟着走。纵向完全不动——吸边是横向的事。
+        /// </summary>
+        internal static Rectangle SnapSideEdges(Rectangle proposed, Rectangle current, Rectangle workArea, int approach)
+        {
+            // 窗口比工作区还宽时没有可吸附的余地，原样返回，免得硬把它挤到某一侧。
+            if (proposed.Width >= workArea.Width) return proposed;
+
+            bool left = proposed.Left <= workArea.Left + approach && proposed.Left <= current.Left;
+            bool right = proposed.Right >= workArea.Right - approach && proposed.Right >= current.Right;
+            if (left && right)
+            {
+                // 窗口几乎和工作区一样宽时两侧会同时命中，取更靠近的那侧，结果才稳定。
+                if (Math.Abs(proposed.Left - workArea.Left) <= Math.Abs(proposed.Right - workArea.Right)) right = false;
+                else left = false;
+            }
+            if (left) proposed.X = workArea.Left;
+            else if (right) proposed.X = workArea.Right - proposed.Width;
+            return proposed;
         }
 
         /// <summary>把窗口贴齐到该侧屏幕边缘，保留大小，纵向位置夹在工作区内。</summary>

@@ -169,6 +169,38 @@ namespace MiniView.WebView2App
                 == EdgeDockSide.None, "贴边：超出阈值不吸附");
             failures += Check(WindowRules.ResolveEdgeDockSide(new Rectangle(5, 200, 1910, 760), screen, 16)
                 == EdgeDockSide.Left, "贴边：两侧都够近时取更近的一侧");
+            failures += Check(WindowRules.ResolveEdgeDockSide(new Rectangle(2020, 200, 420, 760), screen, 16)
+                == EdgeDockSide.Right, "贴边：冲过右边缘超过阈值仍算贴边");
+            failures += Check(WindowRules.ResolveEdgeDockSide(new Rectangle(-300, 200, 420, 760), screen, 16)
+                == EdgeDockSide.Left, "贴边：冲过左边缘超过阈值仍算贴边");
+            // 拖动中的左右吸附：靠近就贴齐、冲出去拉回来、反向拖动立刻放手不黏住，纵向一律不碰。
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(700, 200, 420, 760),
+                new Rectangle(650, 200, 420, 760), screen, 16)
+                == new Rectangle(700, 200, 420, 760), "拖动吸附：离边缘远时不干预");
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(10, 200, 420, 760),
+                new Rectangle(120, 200, 420, 760), screen, 16)
+                == new Rectangle(0, 200, 420, 760), "拖动吸附：靠近左边缘就贴齐");
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(1490, 200, 420, 760),
+                new Rectangle(1400, 200, 420, 760), screen, 16)
+                == new Rectangle(1500, 200, 420, 760), "拖动吸附：靠近右边缘就贴齐");
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(-300, 200, 420, 760),
+                new Rectangle(-200, 200, 420, 760), screen, 16)
+                == new Rectangle(0, 200, 420, 760), "拖动吸附：冲出左边缘拉回来");
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(1800, 200, 420, 760),
+                new Rectangle(1750, 200, 420, 760), screen, 16)
+                == new Rectangle(1500, 200, 420, 760), "拖动吸附：冲出右边缘拉回来");
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(5, 200, 420, 760),
+                new Rectangle(0, 200, 420, 760), screen, 16)
+                == new Rectangle(5, 200, 420, 760), "拖动吸附：从贴边往外拖立刻放手不黏住");
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(600, 120, 420, 760),
+                new Rectangle(600, 400, 420, 760), screen, 16)
+                == new Rectangle(600, 120, 420, 760), "拖动吸附：只动横向不碰纵向");
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(5, 200, 1910, 760),
+                new Rectangle(5, 200, 1910, 760), screen, 16)
+                == new Rectangle(0, 200, 1910, 760), "拖动吸附：两侧同时命中时取更近的一侧");
+            failures += Check(WindowRules.SnapSideEdges(new Rectangle(30, 200, 1920, 760),
+                new Rectangle(30, 200, 1920, 760), screen, 16)
+                == new Rectangle(30, 200, 1920, 760), "拖动吸附：窗口与工作区同宽时不吸附");
             Rectangle dockedRight = WindowRules.CalculateEdgeDockBounds(screen,
                 new Rectangle(1500, 300, 420, 700), EdgeDockSide.Right);
             failures += Check(dockedRight.Right == screen.Right && dockedRight.Top == 300
