@@ -7,12 +7,26 @@ using System.Windows.Forms;
 
 namespace MiniView.WebView2App
 {
+    /// <summary>窗口贴靠的屏幕边缘。只支持左右两边：上边会和清爽模式的贴顶唤出工具栏抢同一块区域。</summary>
+    internal enum EdgeDockSide
+    {
+        None = 0,
+        Left = 1,
+        Right = 2
+    }
+
     internal static class WindowRules
     {
         internal static readonly Size DefaultSize = new Size(420, 760);
         internal static readonly Size MiniSize = new Size(340, 600);
         internal const int MiniMinWidth = 260;
         internal const int MiniMinHeight = 300;
+        // 贴边自动隐藏：拖动结束后距屏幕边缘这个范围内算贴边；收起后鼠标贴在边缘这条窄带内唤出；
+        // 触发段按窗口原本占据的高度上下各留一点容错；鼠标离开后等一小会儿再收起，避免蹭边反复起停。
+        internal const int EdgeDockThreshold = 16;
+        internal const int EdgeDockBand = 4;
+        internal const int EdgeDockSpanPadding = 8;
+        internal const int EdgeDockLeaveDelayMilliseconds = 300;
 
         internal static bool IsDouyinUrl(string rawUrl)
         {
@@ -123,6 +137,62 @@ namespace MiniView.WebView2App
                 Math.Max(workArea.Top, workArea.Bottom - height - margin),
                 width,
                 height);
+        }
+
+        /// <summary>
+        /// 贴边自动隐藏开启时，鼠标移出自动隐藏必须让位：两套逻辑都靠"鼠标离开窗口"触发，
+        /// 同时生效时旧的隐藏会抢先真正隐藏窗口，贴边收起和碰边唤出就永远不会发生。
+        /// </summary>
+        internal static bool EffectiveMouseLeaveAutoHide(bool mouseLeaveEnabled, bool edgeAutoHideEnabled)
+        {
+            return mouseLeaveEnabled && !edgeAutoHideEnabled;
+        }
+
+        /// <summary>
+        /// 拖动结束后判断窗口贴到了哪条屏幕边缘。距离用窗口边缘对工作区边缘算，
+        /// 超过阈值返回 None（窗口就停在原地，解除贴边）。
+        /// </summary>
+        internal static EdgeDockSide ResolveEdgeDockSide(Rectangle bounds, Rectangle workArea, int threshold)
+        {
+            int leftDistance = Math.Abs(bounds.Left - workArea.Left);
+            int rightDistance = Math.Abs(bounds.Right - workArea.Right);
+            bool left = leftDistance <= threshold;
+            bool right = rightDistance <= threshold;
+            if (left && right) return leftDistance <= rightDistance ? EdgeDockSide.Left : EdgeDockSide.Right;
+            if (left) return EdgeDockSide.Left;
+            if (right) return EdgeDockSide.Right;
+            return EdgeDockSide.None;
+        }
+
+        /// <summary>把窗口贴齐到该侧屏幕边缘，保留大小，纵向位置夹在工作区内。</summary>
+        internal static Rectangle CalculateEdgeDockBounds(Rectangle workArea, Rectangle current, EdgeDockSide side)
+        {
+            int width = Math.Min(Math.Max(1, current.Width), workArea.Width);
+            int height = Math.Min(Math.Max(1, current.Height), workArea.Height);
+            int y = Math.Max(workArea.Top, Math.Min(current.Top, workArea.Bottom - height));
+            int x = side == EdgeDockSide.Right ? workArea.Right - width : workArea.Left;
+            return new Rectangle(x, y, width, height);
+        }
+
+        /// <summary>
+        /// 收起后鼠标回到屏幕边缘的哪一段才唤出：横向是贴着该侧边缘的窄带，
+        /// 纵向只覆盖窗口原本占据的那一段（上下各留一点容错），不整条边都变成热区。
+        /// </summary>
+        internal static Rectangle CalculateEdgeRevealZone(Rectangle anchorBounds, Rectangle workArea,
+            EdgeDockSide side, int band, int padding)
+        {
+            if (side == EdgeDockSide.None) return Rectangle.Empty;
+            int top = Math.Max(workArea.Top, anchorBounds.Top - padding);
+            int bottom = Math.Min(workArea.Bottom, anchorBounds.Bottom + padding);
+            if (bottom <= top) return Rectangle.Empty;
+            int left = side == EdgeDockSide.Left ? workArea.Left : workArea.Right - band;
+            return new Rectangle(left, top, band, bottom - top);
+        }
+
+        /// <summary>收起状态下判断是否应当滑回来：必须先离开过触发段，否则刚拖到边缘就会立刻弹回。</summary>
+        internal static bool ShouldRevealDockedWindow(Point cursor, Rectangle revealZone, bool revealArmed)
+        {
+            return revealArmed && revealZone.Contains(cursor);
         }
     }
 

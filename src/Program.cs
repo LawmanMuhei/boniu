@@ -154,11 +154,54 @@ namespace MiniView.WebView2App
             failures += Check(WindowRules.NormalizeAutoHideDelay(300) == 300, "支持 0.3 秒隐藏延迟");
             failures += Check(WindowRules.NormalizeAutoHideDelay(500) == 500, "支持 0.5 秒隐藏延迟");
             failures += Check(WindowRules.NormalizeAutoHideDelay(0) == 100, "无效隐藏延迟回退默认值");
+            // 贴边自动隐藏：互斥关系、贴边判定、贴齐坐标、触发段与"先离开再回来"的唤出条件。
+            failures += Check(WindowRules.EffectiveMouseLeaveAutoHide(true, false), "鼠标移出隐藏正常生效");
+            failures += Check(!WindowRules.EffectiveMouseLeaveAutoHide(true, true)
+                && !WindowRules.EffectiveMouseLeaveAutoHide(false, true), "贴边自动隐藏开启后接管鼠标移出隐藏");
+            Rectangle screen = new Rectangle(0, 0, 1920, 1040);
+            failures += Check(WindowRules.ResolveEdgeDockSide(new Rectangle(0, 200, 420, 760), screen, 16)
+                == EdgeDockSide.Left, "贴边：贴到左边缘");
+            failures += Check(WindowRules.ResolveEdgeDockSide(new Rectangle(1500, 200, 420, 760), screen, 16)
+                == EdgeDockSide.Right, "贴边：贴到右边缘");
+            failures += Check(WindowRules.ResolveEdgeDockSide(new Rectangle(700, 200, 420, 760), screen, 16)
+                == EdgeDockSide.None, "贴边：离两侧都远不吸附");
+            failures += Check(WindowRules.ResolveEdgeDockSide(new Rectangle(20, 200, 420, 760), screen, 16)
+                == EdgeDockSide.None, "贴边：超出阈值不吸附");
+            failures += Check(WindowRules.ResolveEdgeDockSide(new Rectangle(5, 200, 1910, 760), screen, 16)
+                == EdgeDockSide.Left, "贴边：两侧都够近时取更近的一侧");
+            Rectangle dockedRight = WindowRules.CalculateEdgeDockBounds(screen,
+                new Rectangle(1500, 300, 420, 700), EdgeDockSide.Right);
+            failures += Check(dockedRight.Right == screen.Right && dockedRight.Top == 300
+                && dockedRight.Width == 420, "贴边：右侧贴齐并保留大小");
+            Rectangle dockedLeft = WindowRules.CalculateEdgeDockBounds(screen,
+                new Rectangle(2, -100, 420, 760), EdgeDockSide.Left);
+            failures += Check(dockedLeft.Left == screen.Left && dockedLeft.Top == screen.Top,
+                "贴边：左侧贴齐并夹在屏幕内");
+            Rectangle leftZone = WindowRules.CalculateEdgeRevealZone(new Rectangle(0, 300, 420, 400),
+                screen, EdgeDockSide.Left, 4, 8);
+            failures += Check(leftZone.Left == screen.Left && leftZone.Width == 4
+                && leftZone.Top == 292 && leftZone.Bottom == 708, "贴边：左边缘触发段只覆盖窗口那一段");
+            Rectangle rightZone = WindowRules.CalculateEdgeRevealZone(new Rectangle(1500, 300, 420, 400),
+                screen, EdgeDockSide.Right, 4, 8);
+            failures += Check(rightZone.Right == screen.Right && rightZone.Width == 4,
+                "贴边：右边缘触发段贴着屏幕右边");
+            failures += Check(WindowRules.CalculateEdgeRevealZone(new Rectangle(0, 300, 420, 400),
+                screen, EdgeDockSide.None, 4, 8).IsEmpty, "贴边：未贴边时没有触发段");
+            failures += Check(WindowRules.ShouldRevealDockedWindow(new Point(1, 500), leftZone, true),
+                "贴边：光标回到触发段唤出");
+            failures += Check(!WindowRules.ShouldRevealDockedWindow(new Point(1, 500), leftZone, false),
+                "贴边：刚收起时先要求光标离开过");
+            failures += Check(!WindowRules.ShouldRevealDockedWindow(new Point(1, 900), leftZone, true),
+                "贴边：触发段之外不唤出");
+            failures += Check(!WindowRules.ShouldRevealDockedWindow(new Point(600, 500), leftZone, true),
+                "贴边：离开屏幕边缘不唤出");
 
             AppSettings defaultSettings = new AppSettings();
             failures += Check(defaultSettings.AutoHideEnabled, "默认开启鼠标移出隐藏");
             failures += Check(defaultSettings.AutoHideDelayMilliseconds == 100, "默认隐藏延迟为 0.1 秒");
             failures += Check(!defaultSettings.HideWhenInactive, "默认关闭失焦隐藏");
+            failures += Check(!defaultSettings.EdgeAutoHideEnabled, "默认关闭贴边自动隐藏");
+            failures += Check(defaultSettings.AutoHideEnabledBeforeEdge, "默认记住贴边接管前的鼠标移出隐藏选择");
             HotkeyDefinition immersiveDefault;
             failures += Check(HotkeyDefinition.TryParse(defaultSettings.ImmersiveShortcut, out immersiveDefault)
                 && immersiveDefault.Serialize() == "Control+Alt+F", "清爽模式默认快捷键为 Ctrl+Alt+F");
@@ -167,6 +210,7 @@ namespace MiniView.WebView2App
             AppSettings upgradedSettings = serializer.Deserialize<AppSettings>("{\"Muted\":true}");
             failures += Check(upgradedSettings.AutoHideEnabled, "旧设置升级后保持鼠标移出隐藏");
             failures += Check(upgradedSettings.AutoHideDelayMilliseconds == 100, "旧设置升级后使用 0.1 秒延迟");
+            failures += Check(!upgradedSettings.EdgeAutoHideEnabled, "旧设置升级后默认不开启贴边自动隐藏");
 
             Rectangle landscape = WindowRules.CalculateLandscapeBounds(new Rectangle(100, 100, 420, 760), new Rectangle(0, 0, 1920, 1040));
             failures += Check(landscape.Width == 760 && landscape.Height == 428, "直播横屏尺寸");

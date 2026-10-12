@@ -145,6 +145,58 @@ namespace MiniView.WebView2App
                 webView.NavigateToString(RegressionHtml);
                 await WaitForPageAsync("window.fixtureReady === true");
                 AssertRegression(await WebViewRendersFixtureAsync(), "WebView renders after idle suspend cycle");
+
+                // 贴边自动隐藏：先走用户真实路径（开关的接管与还原），再用真实窗口跑状态机。
+                // 唤出依赖真实光标位置，无法合成，所以那部分判定由 --self-test 的纯逻辑覆盖。
+                bool mouseLeaveBefore = settings.AutoHideEnabled;
+                settings.AutoHideEnabled = true;
+                SetEdgeAutoHide(true);
+                AssertRegression(settings.EdgeAutoHideEnabled && !settings.AutoHideEnabled,
+                    "edge auto hide takes over mouse-leave auto hide");
+                SetEdgeAutoHide(false);
+                AssertRegression(!settings.EdgeAutoHideEnabled && settings.AutoHideEnabled,
+                    "disabling edge auto hide restores the earlier choice");
+                // 设置界面确实挂上了这一项，并且接管期间「鼠标移出自动隐藏」开关置灰。
+                AssertRegression(cards.Any(card => card.Rows.Any(row => row.Editor == edgeHideToggle)),
+                    "settings exposes the edge auto hide switch");
+                SetEdgeAutoHide(true);
+                AssertRegression(!autoHideToggle.Enabled && edgeHideToggle.Checked,
+                    "edge auto hide greys out the mouse-leave switch");
+                SetEdgeAutoHide(false);
+                AssertRegression(autoHideToggle.Enabled && !edgeHideToggle.Checked,
+                    "mouse-leave switch is usable again after edge auto hide is off");
+                settings.AutoHideEnabled = mouseLeaveBefore;
+
+                Rectangle boundsBeforeEdgeDock = Bounds;
+                settings.EdgeAutoHideEnabled = true;
+                settings.AutoHideEnabled = false;
+                Rectangle edgeWorkArea = Screen.FromRectangle(Bounds).WorkingArea;
+                SetBoundsProgrammatically(new Rectangle(edgeWorkArea.Left + 4, Bounds.Top, Bounds.Width, Bounds.Height));
+                EvaluateEdgeDock();
+                AssertRegression(edgeDockSide == EdgeDockSide.Left && Bounds.Left == edgeWorkArea.Left,
+                    "dragging against the left screen edge docks flush to it");
+                AssertRegression(!Visible, "edge dock hides the window");
+                AssertRegression(pointerTimer.Interval == EdgeDockPollIntervalMilliseconds,
+                    "edge dock keeps the hover poll responsive");
+                AssertRegression(webView.CoreWebView2.IsMuted, "edge dock mutes immediately");
+                await WaitForPageAsync("document.getElementById('playing').paused");
+                RevealDockedWindow();
+                AssertRegression(Visible && edgeDockSide == EdgeDockSide.Left, "edge dock reveals and keeps docking");
+                AssertRegression(!webView.CoreWebView2.IsMuted, "edge dock reveal unmutes");
+                await WaitForPageAsync("!document.getElementById('playing').paused");
+                // 显式恢复（老板键/托盘）必须解除贴边，否则鼠标一离开又会立刻收起。
+                HideWindow();
+                AssertRegression(edgeDockSide == EdgeDockSide.None && !Visible, "explicit hide releases the edge dock");
+                ShowWindow();
+                AssertRegression(Visible && edgeDockSide == EdgeDockSide.None, "explicit show releases the edge dock");
+                // 唤出后把窗口拖离边缘同样解除贴边，窗口留在用户放下的位置。
+                SetBoundsProgrammatically(new Rectangle(edgeWorkArea.Left + 200, Bounds.Top, Bounds.Width, Bounds.Height));
+                EvaluateEdgeDock();
+                AssertRegression(edgeDockSide == EdgeDockSide.None && Visible, "dragging away from the edge releases the dock");
+                settings.EdgeAutoHideEnabled = false;
+                settings.AutoHideEnabled = mouseLeaveBefore;
+                SetBoundsProgrammatically(boundsBeforeEdgeDock);
+
                 AssertRegression(!File.Exists(Path.Combine(appFolder, "settings.json")), "test has not persisted settings");
                 Console.WriteLine("Regression: " + regressionResults.Count + " checks passed");
                 Environment.ExitCode = 0;

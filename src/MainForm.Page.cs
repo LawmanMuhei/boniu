@@ -86,6 +86,7 @@ namespace MiniView.WebView2App
                 ? WindowRules.CalculateLandscapeBounds(Bounds, workArea)
                 : WindowRules.KeepOnScreen(settings.LiveBounds, 640, 360, new Size(800, 450));
             SetBoundsProgrammatically(target);
+            RefreshEdgeDockAnchor();
             ScheduleSettingsSave();
         }
 
@@ -96,6 +97,7 @@ namespace MiniView.WebView2App
             MinimumSize = new Size(280, 460);
             Rectangle target = WindowRules.KeepOnScreen(settings.NormalBounds, 280, 460, WindowRules.DefaultSize);
             SetBoundsProgrammatically(target);
+            RefreshEdgeDockAnchor();
             ScheduleSettingsSave();
         }
 

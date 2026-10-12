@@ -46,6 +46,7 @@ namespace MiniView.WebView2App
             SettingsCard behaviorCard = AddCard("行为");
             AddInlineRow(behaviorCard, "鼠标移出自动隐藏", autoHideStatus, autoHideToggle, 44, 26);
             delayRow = AddStackedRow(behaviorCard, "隐藏延迟", autoHideDelayPicker, 28);
+            AddInlineRow(behaviorCard, "贴边自动隐藏", edgeHideStatus, edgeHideToggle, 44, 26);
             AddInlineRow(behaviorCard, "失去焦点时隐藏", inactiveHideStatus, inactiveHideToggle, 44, 26);
             AddInlineRow(behaviorCard, "直播自动横屏", liveStatus, landscapeToggle, 44, 26);
             AddInlineRow(behaviorCard, "显示托盘恢复入口", trayStatus, trayToggle, 44, 26);
@@ -100,6 +101,11 @@ namespace MiniView.WebView2App
                 outsideSince = null;
                 ScheduleSettingsSave();
                 UpdateSettingsUi();
+            };
+            edgeHideToggle.CheckedChanged += delegate
+            {
+                if (edgeHideToggle.Checked == settings.EdgeAutoHideEnabled) return;
+                SetEdgeAutoHide(edgeHideToggle.Checked);
             };
             autoHideDelayPicker.SelectedIndexChanged += delegate
             {
@@ -677,15 +683,24 @@ namespace MiniView.WebView2App
             toolTip.SetToolTip(muteShortcutButton, "静音/恢复声音" + FormatShortcut(muteHotkey) + "；" + ShortcutHint(muteHotkey));
             toolTip.SetToolTip(miniShortcutButton, "迷你小窗" + FormatShortcut(miniHotkey) + "；" + ShortcutHint(miniHotkey));
             autoHideToggle.Checked = settings.AutoHideEnabled;
-            autoHideToggle.Enabled = windowHotkeyAvailable || !IsHandleCreated;
+            // 贴边自动隐藏开启时由它接管「鼠标移出自动隐藏」，开关置灰，避免两套隐藏互相抢触发。
+            autoHideToggle.Enabled = (windowHotkeyAvailable || !IsHandleCreated) && !settings.EdgeAutoHideEnabled;
             bool delayRowVisible = (settings.AutoHideEnabled && windowHotkeyAvailable) || !IsHandleCreated;
             if (delayRow != null) delayRow.Hidden = !delayRowVisible;
             autoHideDelayPicker.Enabled = settings.AutoHideEnabled;
             autoHideDelayPicker.SelectedIndex = settings.AutoHideDelayMilliseconds == 500 ? 2
                 : settings.AutoHideDelayMilliseconds == 300 ? 1 : 0;
-            autoHideStatus.Text = !windowHotkeyAvailable && IsHandleCreated
-                ? "显示快捷键不可用，本次已停用"
-                : settings.AutoHideEnabled ? "鼠标离开窗口后自动收起" : "已关闭";
+            autoHideStatus.Text = settings.EdgeAutoHideEnabled
+                ? "已由「贴边自动隐藏」接管"
+                : !windowHotkeyAvailable && IsHandleCreated
+                    ? "显示快捷键不可用，本次已停用"
+                    : settings.AutoHideEnabled ? "鼠标离开窗口后自动收起" : "已关闭";
+            edgeHideToggle.Checked = settings.EdgeAutoHideEnabled;
+            edgeHideStatus.Text = !settings.EdgeAutoHideEnabled
+                ? "已关闭"
+                : edgeDockSide == EdgeDockSide.Left ? "已启用；当前贴靠左边缘"
+                : edgeDockSide == EdgeDockSide.Right ? "已启用；当前贴靠右边缘"
+                : "已启用；拖到屏幕左/右边缘收起";
             inactiveHideToggle.Checked = settings.HideWhenInactive;
             inactiveHideStatus.Text = settings.HideWhenInactive ? "切换到其他程序时隐藏" : "已关闭；锁屏时仍会隐藏";
             landscapeToggle.Checked = settings.AutoLandscapeLive;

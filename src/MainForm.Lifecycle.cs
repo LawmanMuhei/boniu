@@ -20,7 +20,10 @@ namespace MiniView.WebView2App
             Diagnostics.Tick();
             Diagnostics.Mark("pointer");
             UpdateImmersiveToolbar();
-            if (IsTestMode || domProbe || !settings.AutoHideEnabled || !CanRestoreWindow
+            MonitorEdgeDock();
+            if (IsTestMode || domProbe
+                || !WindowRules.EffectiveMouseLeaveAutoHide(settings.AutoHideEnabled, settings.EdgeAutoHideEnabled)
+                || !CanRestoreWindow
                 || suppressInactiveHide || captureTarget != null || !Visible
                 || DateTime.UtcNow < showGraceUntil) return;
             if (Control.MouseButtons != MouseButtons.None)
@@ -46,7 +49,15 @@ namespace MiniView.WebView2App
             if ((DateTime.UtcNow - outsideSince.Value).TotalMilliseconds >= settings.AutoHideDelayMilliseconds) HideWindow();
         }
 
+        /// <summary>显式隐藏（老板键、工具栏按钮、托盘）。先解除贴边：用户是按了明确的隐藏命令，
+        /// 期望的是常规隐藏并由快捷键/托盘恢复，而不是碰边就能唤回。</summary>
         private void HideWindow()
+        {
+            UndockEdge();
+            HideWindowCore();
+        }
+
+        private void HideWindowCore()
         {
             if (!Visible || isQuitting) return;
             DismissOwnedPopups();
@@ -125,7 +136,14 @@ namespace MiniView.WebView2App
             else ShowOwnedMessage("显示快捷键不可用，请先在设置中修改快捷键，或重新打开程序恢复窗口。", "波妞摸鱼", MessageBoxIcon.Warning);
         }
 
+        /// <summary>显式恢复（老板键、托盘、第二个实例）：恢复的同时解除贴边。</summary>
         private void ShowWindow()
+        {
+            UndockEdge();
+            ShowWindowCore();
+        }
+
+        private void ShowWindowCore()
         {
             if (isQuitting || IsDisposed) return;
             Stopwatch elapsed = Stopwatch.StartNew();
@@ -216,6 +234,8 @@ namespace MiniView.WebView2App
 
         private void ToggleMiniMode()
         {
+            // 贴边收起时按快捷键：用户是想看窗口，先恢复并解除贴边，再切换形态。
+            if (edgeDockSide != EdgeDockSide.None) ShowWindow();
             if (miniMode) ExitMiniMode();
             else EnterMiniMode();
         }

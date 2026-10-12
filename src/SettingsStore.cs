@@ -34,6 +34,9 @@ namespace MiniView.WebView2App
         public bool ShowTrayIcon { get; set; }
         public bool AutoHideEnabled { get; set; }
         public int AutoHideDelayMilliseconds { get; set; }
+        public bool EdgeAutoHideEnabled { get; set; }
+        // 贴边自动隐藏开启时会把「鼠标移出自动隐藏」关掉，这里记住接管前的选择，关掉贴边后原样还回去。
+        public bool AutoHideEnabledBeforeEdge { get; set; }
         public bool HideWhenInactive { get; set; }
         public bool HideLeftNav { get; set; }
         public bool HideTopBar { get; set; }
@@ -54,6 +57,7 @@ namespace MiniView.WebView2App
             MiniShortcut = "Control+Alt+S";
             AutoHideEnabled = true;
             AutoHideDelayMilliseconds = 100;
+            AutoHideEnabledBeforeEdge = true;
             HideWhenInactive = false;
             HideLeftNav = false;
             HideTopBar = false;
@@ -123,6 +127,7 @@ namespace MiniView.WebView2App
         internal const int WM_HOTKEY = 0x0312;
         internal const int WM_ACTIVATEAPP = 0x001C;
         internal const int WM_NCHITTEST = 0x0084;
+        internal const int WM_EXITSIZEMOVE = 0x0232;
         internal const int WM_NCLBUTTONDOWN = 0x00A1;
         internal const int HTCAPTION = 2;
         internal const int HTLEFT = 10;

@@ -34,6 +34,8 @@ namespace MiniView.WebView2App
         private const int ShowGraceMilliseconds = 2200;
         private const int WebViewSuspendDelayMilliseconds = 10000;
         private const int AutoHidePointerMargin = 18;
+        // 贴边收起后的轮询间隔：常规隐藏用 250ms 保持心跳，但碰边唤出要跟手。
+        private const int EdgeDockPollIntervalMilliseconds = 60;
 
         private readonly VisibilityAwareWebView webView = new VisibilityAwareWebView();
         private readonly Panel toolbar = new Panel();
@@ -70,11 +72,13 @@ namespace MiniView.WebView2App
         private readonly Label muteShortcutStatus = CreateStatusLabel();
         private readonly Label miniShortcutStatus = CreateStatusLabel();
         private readonly Label autoHideStatus = CreateStatusLabel();
+        private readonly Label edgeHideStatus = CreateStatusLabel();
         private readonly Label inactiveHideStatus = CreateStatusLabel();
         private readonly Label liveStatus = CreateStatusLabel();
         private readonly Label dataStatus = CreateStatusLabel();
         private readonly Label updateStatus = CreateStatusLabel();
         private readonly ToggleSwitch autoHideToggle = new ToggleSwitch();
+        private readonly ToggleSwitch edgeHideToggle = new ToggleSwitch();
         private readonly ToggleSwitch inactiveHideToggle = new ToggleSwitch();
         private readonly ToggleSwitch trayToggle = new ToggleSwitch();
         private readonly Label trayStatus = CreateStatusLabel();
@@ -301,7 +305,7 @@ namespace MiniView.WebView2App
                     await CheckForUpdatesAsync(false);
             };
             Resize += delegate { LayoutWindow(); UpdateZoom(); };
-            ResizeEnd += delegate { RememberCurrentBounds(); };
+            ResizeEnd += delegate { RememberCurrentBounds(); EvaluateEdgeDock(); };
             Move += delegate { RememberCurrentBounds(); };
             FormClosing += OnFormClosing;
             FormClosed += delegate
@@ -435,6 +439,16 @@ namespace MiniView.WebView2App
             {
                 if (!isQuitting && !IsDisposed && IsHandleCreated)
                     BeginInvoke((MethodInvoker)HideWhenApplicationBecomesInactive);
+            }
+
+            if (m.Msg == NativeMethods.WM_EXITSIZEMOVE)
+            {
+                base.WndProc(ref m);
+                // 贴边判定必须在拖动/缩放真正结束时做。WinForms 由这条消息派发 ResizeEnd，
+                // 但只依赖事件不够保险（漏发就整条功能静默失效），这里直接兜底；
+                // 两处都调用是无害的，判定本身幂等。
+                EvaluateEdgeDock();
+                return;
             }
 
             if (m.Msg == NativeMethods.WM_NCHITTEST && WindowState == FormWindowState.Normal)
