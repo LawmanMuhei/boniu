@@ -36,6 +36,18 @@ namespace MiniView.WebView2App
             brandLabel.MouseDown += DragWindow;
             settingsPanel.Controls.Add(brandLabel);
 
+            SettingsCard browsingCard = AddCard("浏览");
+            AddStackedRow(browsingCard, "访问模式", siteModePicker, 30);
+            AddInlineRow(browsingCard, "手机版说明", siteModeStatus, null, 0, 0);
+            siteModePicker.Font = UiFonts.Caption;
+            siteModePicker.AccessibleName = "访问模式";
+            siteModePicker.Items.Add("手机版");
+            siteModePicker.Items.Add("电脑版");
+            siteModePicker.SelectedIndexChanged += async delegate
+            {
+                await ChangeSiteModeAsync(siteModePicker.SelectedIndex == 0 ? SiteMode.Mobile : SiteMode.Desktop);
+            };
+
             SettingsCard hotkeyCard = AddCard("快捷键");
             AddInlineRow(hotkeyCard, "隐藏/显示程序", windowShortcutStatus, windowShortcutButton, 104, 30);
             AddInlineRow(hotkeyCard, "隐藏/显示边框", chromeShortcutStatus, chromeShortcutButton, 104, 30);
@@ -584,7 +596,7 @@ namespace MiniView.WebView2App
             }
         }
 
-        private void ResetApplicationSettings()
+        private async void ResetApplicationSettings()
         {
             if (!ShowConfirmation("确定恢复程序默认设置吗？\r\n\r\n窗口大小、位置、快捷键和显示选项将恢复默认，但不会清除抖音登录。",
                 "恢复默认设置")) return;
@@ -608,6 +620,11 @@ namespace MiniView.WebView2App
             SaveSettingsNow();
             showGraceUntil = DateTime.UtcNow.AddMilliseconds(ShowGraceMilliseconds);
             SetDataStatus("程序设置已恢复默认");
+            if (webViewReady)
+            {
+                try { await ApplyDeviceProfileAsync(); UpdateZoom(); webView.CoreWebView2.Navigate(HomeUrl); }
+                catch (Exception exception) { Diagnostics.LogException("ResetDeviceProfile", exception); ShowTransientNotice("设备配置重置失败，请重新打开程序。"); }
+            }
             UpdateSettingsUi();
         }
 
@@ -625,7 +642,8 @@ namespace MiniView.WebView2App
             try
             {
                 await webView.CoreWebView2.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.AllProfile);
-                webView.CoreWebView2.Navigate(DouyinUrl);
+                mobileHomePending = CurrentSiteMode == SiteMode.Mobile;
+                webView.CoreWebView2.Navigate(HomeUrl);
                 SetDataStatus("登录和网页缓存已清除");
             }
             catch (Exception exception)
@@ -659,6 +677,11 @@ namespace MiniView.WebView2App
 
         private void UpdateSettingsUi()
         {
+            bool mobileSite = CurrentSiteMode == SiteMode.Mobile;
+            siteModePicker.SelectedIndex = mobileSite ? 0 : 1;
+            siteModePicker.Enabled = webViewReady && !deviceProfileChanging;
+            siteModeStatus.Text = "可切视频；仍含电脑布局，登录待验证";
+            toolTip.SetToolTip(siteModeStatus, "手机身份下仍可能显示电脑布局；登录、直播与推荐效果待实际账号验收。切换会重载页面。");
             UpdateRecoveryTray();
             trayToggle.Checked = settings.ShowTrayIcon;
             trayStatus.Text = !windowHotkeyAvailable && IsHandleCreated ? "快捷键不可用时自动保留恢复入口" : settings.ShowTrayIcon ? "双击托盘图标恢复窗口" : "关闭；仍可重新打开程序恢复";
@@ -711,11 +734,18 @@ namespace MiniView.WebView2App
             topBarStatus.Text = settings.HideTopBar ? "已隐藏" : "已显示";
             rightBarToggle.Checked = settings.HideRightBar;
             rightBarStatus.Text = settings.HideRightBar ? "已隐藏" : "已显示";
+            landscapeToggle.Enabled = leftNavToggle.Enabled = topBarToggle.Enabled = rightBarToggle.Enabled = !mobileSite;
+            if (mobileSite)
+            {
+                liveStatus.Text = "手机版直播布局未验证";
+                leftNavStatus.Text = topBarStatus.Text = rightBarStatus.Text = "仅电脑版可用";
+            }
             toolTip.SetToolTip(immersiveShortcutButton,
                 "进入/退出清爽模式" + FormatShortcut(immersiveHotkey) + "；" + ShortcutHint(immersiveHotkey));
             immersiveToggle.Checked = settings.ImmersiveMode;
             immersiveStatus.Text = pageStyleFallback ? "布局异常，已回退；可点击重新应用" : settings.ImmersiveMode
                 ? "隐藏页面装饰，保留原生播放器" : "已关闭";
+            if (mobileSite) immersiveStatus.Text = "手机版保留原网页；无桌面布局检查";
             miniToggle.Checked = miniMode;
             miniStatus.Text = miniMode ? "已启用；再次点击或按快捷键退出" : "点击开关或按快捷键进入";
             LayoutSettingsPanel();

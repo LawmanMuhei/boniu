@@ -15,7 +15,8 @@ namespace MiniView.WebView2App
 {
     internal sealed partial class MainForm : Form
     {
-        private const string DouyinUrl = "https://www.douyin.com/?recommend=1";
+        private SiteMode CurrentSiteMode { get { return WindowRules.ParseSiteMode(settings.SiteMode); } }
+        private string HomeUrl { get { return WindowRules.GetHomeUrl(CurrentSiteMode); } }
         private const int ToolbarHeight = 36;
         private const int ToolbarButtonWidth = 30;
         private const int ToolbarButtonHeight = 28;
@@ -37,7 +38,7 @@ namespace MiniView.WebView2App
         // 贴边收起后的轮询间隔：常规隐藏用 250ms 保持心跳，但碰边唤出要跟手。
         private const int EdgeDockPollIntervalMilliseconds = 60;
 
-        private readonly VisibilityAwareWebView webView = new VisibilityAwareWebView();
+        private VisibilityAwareWebView webView = new VisibilityAwareWebView();
         private readonly Panel toolbar = new Panel();
         private readonly Panel contentHost = new Panel();
         private readonly DarkScrollPanel settingsPanel = new DarkScrollPanel();

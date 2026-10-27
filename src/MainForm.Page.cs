@@ -81,7 +81,7 @@ namespace MiniView.WebView2App
 
         private void ApplyLiveLayout()
         {
-            if (!settings.AutoLandscapeLive || !currentIsLive || liveLandscapeApplied) return;
+            if (CurrentSiteMode == SiteMode.Mobile || !settings.AutoLandscapeLive || !currentIsLive || liveLandscapeApplied) return;
             settings.NormalBounds = BoundsData.FromRectangle(Bounds);
             liveLandscapeApplied = true;
             MinimumSize = new Size(640, 360);

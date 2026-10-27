@@ -133,6 +133,12 @@ namespace MiniView.WebView2App
         internal static int Run()
         {
             int failures = 0;
+            failures += Check(WindowRules.NormalizeSiteMode("Mobile") == "Mobile" && WindowRules.NormalizeSiteMode("Desktop") == "Desktop", "规范化访问模式");
+            failures += Check(WindowRules.NormalizeSiteMode(null) == "Desktop" && WindowRules.NormalizeSiteMode("other") == "Desktop", "未知访问模式保持电脑版");
+            failures += Check(WindowRules.ParseSiteMode("Mobile") == SiteMode.Mobile && WindowRules.ParseSiteMode("desktop") == SiteMode.Desktop, "业务访问模式使用枚举");
+            failures += Check(WindowRules.GetHomeUrl(SiteMode.Mobile).Contains("is_from_mobile_home=1")
+                && WindowRules.GetHomeUrl(SiteMode.Desktop) == "https://www.douyin.com/?recommend=1", "按访问模式选择首页");
+            failures += Check(new AppSettings().SiteMode == "Desktop", "新旧用户默认保持电脑版");
             failures += Check(DeviceProfile.BuildMobileUserAgent("155.0.2849.68").Contains("Chrome/155.0.0.0 Mobile"), "手机 UA 使用真实内核主版本");
             failures += Check(DeviceProfile.BrowserMajor("invalid") == 130 && DeviceProfile.BrowserMajor(null) == 130,
                 "异常内核版本使用探针默认值");

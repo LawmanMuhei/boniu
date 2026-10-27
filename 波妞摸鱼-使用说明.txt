@@ -1,4 +1,4 @@
-波妞摸鱼 1.10.1 使用说明
+波妞摸鱼 1.11.0 使用说明
 =======================
 
 一、运行要求
@@ -9,6 +9,8 @@
 4. 未配置商业代码签名证书时可能显示“未知发布者”。请核对下载来源和 SHA-256；哈希校验不等于发布者身份认证。
 
 二、主要操作
+
+- 设置“浏览”中可切换手机版 / 电脑版访问身份，切换立即重载页面，默认电脑版。手机身份目前仍可能显示电脑布局；登录、直播和推荐变化尚待真实账号验收。
 
 - Ctrl + Alt + D：隐藏或显示整个程序。
 - Ctrl + Alt + B：隐藏或恢复顶部工具栏。
@@ -49,7 +51,7 @@
 - 登录数据：%LOCALAPPDATA%\MiniViewWebView2\UserData
 - 设置：%LOCALAPPDATA%\MiniViewWebView2\settings.json
 - 运行日志：%LOCALAPPDATA%\MiniViewWebView2\logs\run.log
-- 单 EXE 组件：%LOCALAPPDATA%\MiniViewWebView2\App\1.10.1-<架构>
+- 单 EXE 组件：%LOCALAPPDATA%\MiniViewWebView2\App\1.11.0-<架构>
 - 每个架构只保留当前版本和最近一个旧版本的组件；更新前设置备份保留最近三份。
 - 沿用 MiniViewWebView2 目录以保留旧版登录和设置。
 - 隐藏只是桌面窗口行为，不会从任务管理器、管理员、远程管理、录屏或进程审计中隐身。

@@ -46,6 +46,8 @@ namespace MiniView.WebView2App
         public string MuteShortcut { get; set; }
         public string MiniShortcut { get; set; }
         public bool MiniMode { get; set; }
+        // 默认保留电脑身份；手机网页能力与登录兼容性仍需实际账号验收。
+        public string SiteMode { get; set; }
 
         public AppSettings()
         {
@@ -63,6 +65,7 @@ namespace MiniView.WebView2App
             HideTopBar = false;
             HideRightBar = false;
             ImmersiveMode = false;
+            SiteMode = "Desktop";
         }
     }
 
@@ -84,6 +87,7 @@ namespace MiniView.WebView2App
                 AppSettings value = serializer.Deserialize<AppSettings>(File.ReadAllText(settingsPath, Encoding.UTF8));
                 if (value == null) return new AppSettings();
                 value.AutoHideDelayMilliseconds = WindowRules.NormalizeAutoHideDelay(value.AutoHideDelayMilliseconds);
+                value.SiteMode = WindowRules.NormalizeSiteMode(value.SiteMode);
                 return value;
             }
             catch (Exception exception)

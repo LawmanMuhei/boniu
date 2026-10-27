@@ -4,6 +4,15 @@ namespace MiniView.WebView2App
     {
         internal static string BuildVisibility(AppSettings settings, long revision)
         {
+            // 探针没有发现需要隐藏的 App 遮罩；手机身份下不套用桌面 CSS 或健康守卫。
+            if (WindowRules.ParseSiteMode(settings.SiteMode) == SiteMode.Mobile)
+                return @"(() => {
+                  const st=document.getElementById('__boniuPageStyle');if(st)st.remove();
+                  if(window.__boniuImmersiveHealthGuard){clearInterval(window.__boniuImmersiveHealthGuard);window.__boniuImmersiveHealthGuard=0;}
+                  const hooks=window.__boniuImmersiveHealthHooks;
+                  if(hooks)hooks.forEach(h=>['scroll','wheel','touchmove'].forEach(e=>removeEventListener(e,h,true)));
+                  window.__boniuImmersiveHealthHooks=0;
+                })()";
             bool hideLeft = settings.HideLeftNav;
             bool hideTop = settings.HideTopBar;
             bool hideRight = settings.HideRightBar;

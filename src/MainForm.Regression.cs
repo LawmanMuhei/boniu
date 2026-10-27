@@ -20,8 +20,13 @@ namespace MiniView.WebView2App
         {
             try
             {
-                webView.NavigateToString(RegressionHtml);
+                // Client Hints 只在安全上下文可用；本地 HTTPS 映射无需网络，也无需真实登录。
+                File.WriteAllText(Path.Combine(appFolder, "regression.html"), RegressionHtml);
+                webView.CoreWebView2.SetVirtualHostNameToFolderMapping("fixture.douyin.com", appFolder,
+                    Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.DenyCors);
+                webView.CoreWebView2.Navigate("https://fixture.douyin.com/regression.html");
                 await WaitForPageAsync("window.fixtureReady === true");
+                await RunDeviceProfileRegressionAsync();
                 AssertRegression(!settings.AutoLandscapeLive && !settings.ShowTrayIcon, "isolated default settings");
                 AssertRegression(await PageIsTrueAsync("!document.getElementById('playing').paused && document.getElementById('manual').paused"), "synthetic video playing; manually paused video preserved");
                 await MeasurePerformanceAsync("synthetic-playing");
