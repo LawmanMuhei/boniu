@@ -145,6 +145,7 @@ if ($LASTEXITCODE -ne 0) { throw "Application compilation failed with exit code 
 Invoke-CodeSign $appExecutable
 
 & $compiler /nologo /codepage:65001 /optimize+ /debug- "/platform:$Platform" /target:exe `
+    "/win32icon:$iconFile" `
     "/win32manifest:$manifestPath" "/out:$testExecutable" `
     $referenceArguments $appSources
 if ($LASTEXITCODE -ne 0) { throw "Test compilation failed with exit code $LASTEXITCODE." }

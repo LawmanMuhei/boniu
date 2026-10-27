@@ -28,6 +28,7 @@ namespace MiniView.WebView2App
                     return;
                 }
                 updateStatus.Text = "正在检查更新…";
+                updateStatus.ForeColor = UiPalette.TextSecondary;
                 LayoutSettingsPanel();
                 UpdateInfo info = await updateService.CheckAsync();
                 if (isQuitting || IsDisposed) return;
@@ -49,6 +50,7 @@ namespace MiniView.WebView2App
                     summary += " · " + first;
                 }
                 updateStatus.Text = summary;
+                updateStatus.ForeColor = UiPalette.Highlight;
                 checkUpdateButton.Text = "下载并安装 v" + info.Version.ToString(3);
                 toolTip.SetToolTip(checkUpdateButton, "下载 v" + info.Version.ToString(3) + " 并通过 SHA-256 校验后安装，失败自动回滚。再次点击即开始。");
                 LayoutSettingsPanel();

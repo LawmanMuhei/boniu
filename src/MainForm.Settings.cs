@@ -29,12 +29,17 @@ namespace MiniView.WebView2App
             settingsPanel.Controls.Add(headingLabel);
 
             brandLabel.Text = "波妞摸鱼";
+            brandLabel.Text += " v" + AppVersion.Current;
             brandLabel.Font = UiFonts.Caption;
             brandLabel.ForeColor = UiPalette.TextSecondary;
             brandLabel.BackColor = UiPalette.Page;
             brandLabel.AutoSize = true;
             brandLabel.MouseDown += DragWindow;
             settingsPanel.Controls.Add(brandLabel);
+            settingsPanel.Controls.Add(brandIcon);
+            brandIcon.SizeMode = PictureBoxSizeMode.Zoom;
+            using (Icon icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath)) brandIcon.Image = icon.ToBitmap();
+            FormClosed += delegate { if (brandIcon.Image != null) brandIcon.Image.Dispose(); };
 
             SettingsCard browsingCard = AddCard("浏览");
             AddStackedRow(browsingCard, "访问模式", siteModePicker, 30);
@@ -82,16 +87,15 @@ namespace MiniView.WebView2App
             AddFullWidthRow(interfaceCard, retryPageButton, 36);
             retryPageButton.Click += delegate { ReapplyPageStyles(); };
 
-            SettingsCard dataCard = AddCard("数据");
+            SettingsCard dataCard = AddCard("数据与更新");
             AddInlineRow(dataCard, "本地数据", dataStatus, null, 0, 0);
             AddFullWidthRow(dataCard, openDataButton, 36);
             AddFullWidthRow(dataCard, resetSettingsButton, 36);
             AddFullWidthRow(dataCard, clearDataButton, 36);
             SetDataStatus("登录和设置仅保存在本机");
 
-            SettingsCard updateCard = AddCard("关于与更新");
-            AddInlineRow(updateCard, "当前版本", updateStatus, null, 0, 0);
-            AddFullWidthRow(updateCard, checkUpdateButton, 36);
+            AddInlineRow(dataCard, "当前版本", updateStatus, null, 0, 0);
+            AddFullWidthRow(dataCard, checkUpdateButton, 36);
             updateStatus.Text = "v" + UpdateService.CurrentVersion.ToString(3) + " · 启动时检查更新";
 
             autoHideDelayPicker.Font = UiFonts.Caption;
@@ -194,6 +198,8 @@ namespace MiniView.WebView2App
 
             settingsPanel.Paint += PaintSettingsCards;
             settingsPanel.Resize += delegate { LayoutSettingsPanel(); };
+            cards.Remove(hotkeyCard);
+            cards.Insert(3, hotkeyCard);
         }
 
         private SettingsCard AddCard(string title)
@@ -304,12 +310,13 @@ namespace MiniView.WebView2App
             cardRadius = Math.Max(6, Scaled(12));
             int margin = Scaled(16);
             int cardWidth = Math.Max(1, settingsPanel.ClientSize.Width - margin * 2);
-            rowInset = Math.Min(Scaled(20), Math.Max(8, cardWidth / 10));
+            rowInset = Math.Min(Scaled(14), Math.Max(8, cardWidth / 10));
             int cursor = Scaled(18);
 
             headingLabel.Location = new Point(margin + Scaled(2), cursor);
-            brandLabel.Location = new Point(Math.Max(margin, margin + cardWidth - brandLabel.Width), cursor + Scaled(9));
-            cursor += Scaled(44);
+            brandIcon.SetBounds(margin + Scaled(2), headingLabel.Bottom + Scaled(8), Scaled(16), Scaled(16));
+            brandLabel.Location = new Point(margin + Scaled(24), brandIcon.Top);
+            cursor = Math.Max(brandLabel.Bottom, brandIcon.Bottom) + Scaled(20);
 
             foreach (SettingsCard card in cards)
             {
@@ -341,7 +348,7 @@ namespace MiniView.WebView2App
                     rowCursor += rowRect.Height;
                 }
                 card.Bounds = new Rectangle(margin, top, cardWidth, rowCursor);
-                cursor = top + rowCursor + Scaled(24);
+                cursor = top + rowCursor + Scaled(12);
             }
 
             settingsPanel.ScrollContentHeight = cursor;
@@ -410,7 +417,7 @@ namespace MiniView.WebView2App
             }
         }
 
-        private static void FitLabel(Label label, int maxWidth)
+        private void FitLabel(Label label, int maxWidth)
         {
             // AutoSize=false used to retain a wrapped/default height (23px), spilling into
             // the next row at small window widths. Both title and status are single-line.
@@ -419,6 +426,7 @@ namespace MiniView.WebView2App
             label.AutoSize = false;
             label.AutoEllipsis = true;
             label.Size = new Size(Math.Max(1, Math.Min(Math.Max(1, maxWidth), measured.Width)), measured.Height);
+            toolTip.SetToolTip(label, measured.Width > maxWidth ? label.Text : null);
         }
 
         private void SetDataStatus(string message)
@@ -439,6 +447,10 @@ namespace MiniView.WebView2App
                     new RectangleF(visible.X + 0.5F, visible.Y + 0.5F, visible.Width - 1F, visible.Height - 1F), cardRadius))
                 using (SolidBrush brush = new SolidBrush(UiPalette.Card))
                     e.Graphics.FillPath(brush, path);
+
+                using (GraphicsPath outline = UiPaint.RoundedPath(new RectangleF(visible.X + 0.5F,
+                    visible.Y + 0.5F, visible.Width - 1F, visible.Height - 1F), cardRadius))
+                using (Pen border = new Pen(UiPalette.Separator)) e.Graphics.DrawPath(border, outline);
 
                 using (Pen pen = new Pen(UiPalette.Separator))
                 {
@@ -542,6 +554,8 @@ namespace MiniView.WebView2App
                     if (!FitsInsideCard(card, row.Editor)) return false;
                 }
             }
+            foreach (Control child in zoomEditor.Controls)
+                if (child.Left < 0 || child.Top < 0 || child.Right > zoomEditor.Width || child.Bottom > zoomEditor.Height) return false;
             return true;
         }
 
@@ -565,18 +579,19 @@ namespace MiniView.WebView2App
             button.FaceColor = UiPalette.ButtonFace;
             if (danger)
             {
-                button.HoverFaceColor = Color.FromArgb(74, 40, 40);
-                button.PressedFaceColor = Color.FromArgb(96, 46, 46);
+                button.HoverFaceColor = Color.FromArgb(56, 35, 45);
+                button.PressedFaceColor = Color.FromArgb(62, 37, 43);
             }
             else
             {
-                button.HoverFaceColor = Color.FromArgb(58, 58, 60);
-                button.PressedFaceColor = Color.FromArgb(72, 72, 76);
+                button.HoverFaceColor = UiPalette.ToolbarHover;
+                button.PressedFaceColor = UiPalette.ToolbarPressed;
             }
             button.ForeColor = danger ? UiPalette.Destructive : UiPalette.TextPrimary;
             if (danger) button.BorderColor = UiPalette.Destructive;
             button.Font = UiFonts.Caption;
             button.Cursor = Cursors.Hand;
+            button.TabStop = true;
             return button;
         }
 
@@ -704,6 +719,8 @@ namespace MiniView.WebView2App
             muteShortcutButton.FaceColor = UiPalette.ShortcutFace;
             immersiveShortcutButton.FaceColor = UiPalette.ShortcutFace;
             miniShortcutButton.FaceColor = UiPalette.ShortcutFace;
+            foreach (RoundedButton shortcut in new[] { windowShortcutButton, chromeShortcutButton,
+                muteShortcutButton, immersiveShortcutButton, miniShortcutButton }) shortcut.BorderColor = Color.Empty;
             windowShortcutStatus.Text = ShortcutStatusText(windowHotkeyAvailable || !IsHandleCreated, windowHotkey);
             chromeShortcutStatus.Text = ShortcutStatusText(chromeHotkeyAvailable || !IsHandleCreated, chromeHotkey);
             muteShortcutStatus.Text = ShortcutStatusText(muteHotkeyAvailable || !IsHandleCreated, muteHotkey);

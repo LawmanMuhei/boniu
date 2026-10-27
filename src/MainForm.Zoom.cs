@@ -104,6 +104,9 @@ namespace MiniView.WebView2App
             zoomNotice.Cursor = Cursors.Default;
             zoomNotice.TabStop = false;
             zoomNotice.AccessibleRole = AccessibleRole.StaticText;
+            zoomNotice.CornerRadius = 10;
+            zoomNotice.AccentStripe = true;
+            zoomNotice.HoverFaceColor = zoomNotice.PressedFaceColor = UiPalette.CardElevated;
             contentHost.Controls.Add(zoomNotice);
             zoomNoticeTimer.Interval = 1200;
             zoomNoticeTimer.Tick += delegate { zoomNoticeTimer.Stop(); zoomNotice.Visible = false; };
@@ -118,7 +121,9 @@ namespace MiniView.WebView2App
             UpdateSettingsUi();
             if (!showNotice || settingsOpen) return;
             int width = Math.Min(contentHost.Width, Scaled(132));
-            zoomNotice.SetBounds(Math.Max(0, (contentHost.Width - width) / 2), Scaled(12), width, Scaled(32));
+            int top = pageNotice.Visible ? pageNotice.Bottom + Scaled(8) : Scaled(12);
+            zoomNotice.CornerRadius = Scaled(10);
+            zoomNotice.SetBounds(Math.Max(0, (contentHost.Width - width) / 2), top, width, Scaled(32));
             zoomNotice.Text = "缩放 " + UserZoomPercent + "%";
             zoomNotice.Visible = true;
             zoomNotice.BringToFront();

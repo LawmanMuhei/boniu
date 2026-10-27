@@ -52,6 +52,13 @@ foreach ($case in $cases) {
     if (Test-Path -LiteralPath $report) { Copy-Item -LiteralPath $report -Destination (Join-Path $root "regression-$Platform.json") -Force }
     $image = Join-Path $testData 'settings-fixture.png'
     if (Test-Path -LiteralPath $image) { Copy-Item -LiteralPath $image -Destination (Join-Path $root "settings-$Platform.png") -Force }
+    if (Test-Path -LiteralPath $testData) {
+        Get-ChildItem -LiteralPath $testData -Filter 'ui-layout-*.png' | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $root ($_.BaseName + "-$Platform.png")) -Force
+        }
+        $uiReport = Join-Path $testData 'ui-review.json'
+        if (Test-Path -LiteralPath $uiReport) { Copy-Item -LiteralPath $uiReport -Destination (Join-Path $root "ui-review-$Platform.json") -Force }
+    }
     $process.Dispose()
 }
 $reportPath = Join-Path $root "tests-$Platform.json"

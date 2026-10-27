@@ -70,6 +70,7 @@ namespace MiniView.WebView2App
                     if (isQuitting || IsDisposed) return;
                     ApplyPageElementVisibility();
                     await DetectLiveStateAsync();
+                    await InspectDeviceProfileAsync();
                 };
                 core.IsMuted = !Visible || settings.Muted;
                 webViewReady = true;
@@ -119,7 +120,7 @@ namespace MiniView.WebView2App
                     UpdateSettingsUi();
                     Timer exitTimer = new Timer();
                     exitTimer.Interval = 1200;
-                    exitTimer.Tick += delegate
+                    exitTimer.Tick += async delegate
                     {
                         exitTimer.Stop();
                         exitTimer.Dispose();
@@ -150,8 +151,9 @@ namespace MiniView.WebView2App
                                 Directory.CreateDirectory(appFolder);
                                 image.Save(Path.Combine(appFolder, "settings-fixture.png"), System.Drawing.Imaging.ImageFormat.Png);
                             }
+                            await CaptureUiReviewAsync();
                         }
-                        catch (Exception exception) { Console.Error.WriteLine("Settings fixture image: " + exception.Message); }
+                        catch (Exception exception) { Console.Error.WriteLine("Settings fixture image: " + exception.Message); layoutValid = false; }
                         Environment.ExitCode = layoutValid ? 0 : 4;
                         QuitApplication();
                     };

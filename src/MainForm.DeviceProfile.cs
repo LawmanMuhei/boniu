@@ -17,6 +17,7 @@ namespace MiniView.WebView2App
         private bool deviceProfileChanging;
         private bool mobileHomePending;
         private bool recoveringWebView;
+        private int lastProfileRepairGeneration = -1;
 
         private Task<string> CallCdpAsync(string method, Dictionary<string, object> arguments)
         {
@@ -107,11 +108,16 @@ namespace MiniView.WebView2App
                     && (Convert.ToInt32(data["touch"]) > 0) == mobile && Convert.ToBoolean(data["coarse"]) == mobile
                     && Convert.ToString(data["ua"]).Contains("Mobile") == mobile;
                 // 每个完成事件最多校正一次，不重载页面，不让检查形成导航循环。
-                if (!matches) { Diagnostics.Log("device-profile mismatch; reapply once"); await ApplyDeviceProfileAsync(); }
+                if (!matches && lastProfileRepairGeneration != generation)
+                {
+                    lastProfileRepairGeneration = generation;
+                    Diagnostics.Log("device-profile mismatch; reapply once");
+                    await ApplyDeviceProfileAsync();
+                }
                 if (mobileHomePending && mobile && new Uri(webView.CoreWebView2.Source).AbsolutePath == "/jingxuan")
                 {
-                    mobileHomePending = false;
-                    await webView.ExecuteScriptAsync(PageScripts.OpenRecommendScript);
+                    string opened = await webView.ExecuteScriptAsync(PageScripts.OpenRecommendScript);
+                    if (opened != "\"none\"" && opened != "null") mobileHomePending = false;
                 }
             }
             catch (Exception exception) { Diagnostics.LogException("InspectDeviceProfile", exception); }
@@ -168,7 +174,7 @@ namespace MiniView.WebView2App
                 AssertRegression(!leftNavToggle.Enabled && !topBarToggle.Enabled && !rightBarToggle.Enabled && !landscapeToggle.Enabled, "mobile desktop-only controls disabled");
                 settings.SiteMode = "Desktop";
                 await ApplyDeviceProfileAsync();
-                AssertRegression(await PageIsTrueAsync("!navigator.userAgent.includes('Mobile') && !navigator.userAgentData.mobile && navigator.maxTouchPoints===0 && !matchMedia('(pointer:coarse)').matches"), "desktop device profile restored");
+                AssertRegression(await PageIsTrueAsync("!navigator.userAgent.includes('Mobile') && !navigator.userAgentData.mobile && navigator.platform==='Win32' && navigator.maxTouchPoints===0 && !matchMedia('(pointer:coarse)').matches"), "desktop device profile restored");
             }
             finally { settings.SiteMode = "Desktop"; deviceProfileChanging = false; UpdateZoom(); UpdateSettingsUi(); }
         }
