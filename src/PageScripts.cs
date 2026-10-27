@@ -36,6 +36,18 @@ namespace MiniView.WebView2App
 })();";
         }
 
+        /// <summary>
+        /// 抖音电脑版 body 带 min-width:580px。小窗按 100% 显示时视口只有约 370 CSS 像素，右侧互动栏和半个播放器
+        /// 会被裁掉；以前靠把整页缩到 0.6 倍左右塞进去，字小且糊。解除这条限制后页面按窗口宽度重新排版，
+        /// 实测播放器与互动栏完整可见。单独一个 style，不受清爽模式健康守卫回退的影响。
+        /// </summary>
+        internal const string NarrowLayoutScript = @"(function(){
+  if(document.getElementById('__boniuNarrowStyle'))return;
+  var st=document.createElement('style');st.id='__boniuNarrowStyle';
+  st.textContent='html,html body{min-width:0!important;}';
+  (document.head||document.documentElement).appendChild(st);
+})();";
+
         internal static string BuildVisibility(AppSettings settings, long revision)
         {
             // 探针没有发现需要隐藏的 App 遮罩；手机身份下不套用桌面 CSS 或健康守卫。

@@ -219,6 +219,10 @@ namespace MiniView.WebView2App
                 settings.DesktopAutoFit = true;
                 UpdateZoom();
                 AssertRegression(webView.ZoomFactor >= 0.67, "desktop fit does not shrink below 67 percent");
+                await webView.ExecuteScriptAsync("document.body.style.minWidth='580px'");
+                await webView.ExecuteScriptAsync(PageScripts.NarrowLayoutScript);
+                AssertRegression(await PageIsTrueAsync("getComputedStyle(document.body).minWidth==='0px'"), "narrow window lifts douyin body min-width");
+                await webView.ExecuteScriptAsync("(() => { document.body.style.minWidth=''; const s=document.getElementById('__boniuNarrowStyle'); if(s) s.remove(); })()");
                 // 合成一个与抖音实测结构一致的画质菜单：1080P 需登录，应落到 720P；用户手选过的档位不再覆盖。
                 await webView.ExecuteScriptAsync(@"(() => {
                   const host=document.createElement('div');host.className='xgplayer';host.id='__boniuClarityFixture';

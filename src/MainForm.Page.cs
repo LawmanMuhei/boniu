@@ -186,6 +186,8 @@ namespace MiniView.WebView2App
         {
             ObserveTask(ApplyPageElementVisibilityAsync(), "ApplyPageElementVisibility");
             ApplyClarityPreference();
+            if (webViewReady && webView.CoreWebView2 != null && !isQuitting)
+                ObserveTask(webView.ExecuteScriptAsync(PageScripts.NarrowLayoutScript), "ApplyNarrowLayout");
         }
 
         private void ApplyClarityPreference()

@@ -27,6 +27,14 @@ namespace MiniView.WebView2App
                     Application.Run(probe);
                 return Environment.ExitCode;
             }
+            if (HasArgument(args, "--render-probe"))
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                using (RenderProbeForm probe = new RenderProbeForm(GetArgumentValue(args, "--probe-output")))
+                    Application.Run(probe);
+                return Environment.ExitCode;
+            }
 
             bool testMode = HasArgument(args, "--smoke-test") || HasArgument(args, "--live-smoke-test")
                 || HasArgument(args, "--settings-smoke-test") || HasArgument(args, "--dom-probe") || HasArgument(args, "--regression-test");
