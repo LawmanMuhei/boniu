@@ -48,6 +48,9 @@ namespace MiniView.WebView2App
         public bool MiniMode { get; set; }
         // 默认保留电脑身份；手机网页能力与登录兼容性仍需实际账号验收。
         public string SiteMode { get; set; }
+        public bool DesktopAutoFit { get; set; }
+        public int MobileZoomPercent { get; set; }
+        public int DesktopZoomPercent { get; set; }
 
         public AppSettings()
         {
@@ -66,6 +69,8 @@ namespace MiniView.WebView2App
             HideRightBar = false;
             ImmersiveMode = false;
             SiteMode = "Desktop";
+            DesktopAutoFit = true;
+            MobileZoomPercent = DesktopZoomPercent = 100;
         }
     }
 
@@ -88,6 +93,8 @@ namespace MiniView.WebView2App
                 if (value == null) return new AppSettings();
                 value.AutoHideDelayMilliseconds = WindowRules.NormalizeAutoHideDelay(value.AutoHideDelayMilliseconds);
                 value.SiteMode = WindowRules.NormalizeSiteMode(value.SiteMode);
+                value.MobileZoomPercent = WindowRules.NormalizeZoomPercent(value.MobileZoomPercent);
+                value.DesktopZoomPercent = WindowRules.NormalizeZoomPercent(value.DesktopZoomPercent);
                 return value;
             }
             catch (Exception exception)
@@ -129,6 +136,7 @@ namespace MiniView.WebView2App
         }
 
         internal const int WM_HOTKEY = 0x0312;
+        internal const int WM_DPICHANGED = 0x02E0;
         internal const int WM_ACTIVATEAPP = 0x001C;
         internal const int WM_NCHITTEST = 0x0084;
         internal const int WM_ENTERSIZEMOVE = 0x0231;
@@ -160,6 +168,9 @@ namespace MiniView.WebView2App
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool UnregisterHotKey(IntPtr windowHandle, int id);
+
+        [DllImport("user32.dll")]
+        internal static extern uint GetDpiForWindow(IntPtr windowHandle);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]

@@ -393,11 +393,11 @@ namespace MiniView.WebView2App
             float scale = 1F;
             try
             {
-                using (Graphics graphics = CreateGraphics()) scale = graphics.DpiX / 96F;
+                scale = NativeMethods.GetDpiForWindow(Handle) / 96F;
             }
-            catch
+            catch (EntryPointNotFoundException)
             {
-                scale = 1F;
+                using (Graphics graphics = CreateGraphics()) scale = graphics.DpiX / 96F;
             }
             if (scale < 1F) scale = 1F;
             if (scale > 3F) scale = 3F;
@@ -423,6 +423,20 @@ namespace MiniView.WebView2App
 
         protected override void WndProc(ref Message m)
         {
+            if (m.Msg == NativeMethods.WM_DPICHANGED)
+            {
+                NativeMethods.NativeRectangle suggested = (NativeMethods.NativeRectangle)
+                    System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(NativeMethods.NativeRectangle));
+                SetBoundsProgrammatically(Rectangle.FromLTRB(suggested.Left, suggested.Top, suggested.Right, suggested.Bottom));
+                RefreshUiScale();
+                LayoutWindow();
+                LayoutSettingsPanel();
+                ApplyWindowShape();
+                UpdateZoom();
+                Invalidate(true);
+                m.Result = IntPtr.Zero;
+                return;
+            }
             if (m.Msg == NativeMethods.WM_HOTKEY)
             {
                 int id = m.WParam.ToInt32();
@@ -574,11 +588,6 @@ namespace MiniView.WebView2App
             toolTip.SetToolTip(hideButton, "立即隐藏" + FormatShortcut(windowHotkey));
             toolTip.SetToolTip(chromeButton, "隐藏边框" + FormatShortcut(chromeHotkey));
             toolTip.SetToolTip(miniButton, (miniMode ? "退出迷你小窗" : "迷你小窗") + FormatShortcut(miniHotkey));
-        }
-
-        private void UpdateZoom()
-        {
-            if (webViewReady) webView.ZoomFactor = WindowRules.CalculateZoomFactor(ClientSize.Width);
         }
 
         private void LayoutWindow()

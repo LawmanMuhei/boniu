@@ -27,6 +27,7 @@ namespace MiniView.WebView2App
                 webView.CoreWebView2.Navigate("https://fixture.douyin.com/regression.html");
                 await WaitForPageAsync("window.fixtureReady === true");
                 await RunDeviceProfileRegressionAsync();
+                await RunClarityRegressionAsync();
                 AssertRegression(!settings.AutoLandscapeLive && !settings.ShowTrayIcon, "isolated default settings");
                 AssertRegression(await PageIsTrueAsync("!document.getElementById('playing').paused && document.getElementById('manual').paused"), "synthetic video playing; manually paused video preserved");
                 await MeasurePerformanceAsync("synthetic-playing");
