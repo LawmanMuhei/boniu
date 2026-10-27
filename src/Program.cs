@@ -18,6 +18,15 @@ namespace MiniView.WebView2App
             ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;
             if (HasArgument(args, "--self-test")) return SelfTests.Run();
             if (HasArgument(args, "--update-check-test")) return RunUpdateCheckTest();
+            // 手机网页可行性探针使用独立用户目录，不进入正式窗口或读取现有登录。
+            if (HasArgument(args, "--mobile-probe"))
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                using (MobileProbeForm probe = new MobileProbeForm(GetArgumentValue(args, "--probe-output")))
+                    Application.Run(probe);
+                return Environment.ExitCode;
+            }
 
             bool testMode = HasArgument(args, "--smoke-test") || HasArgument(args, "--live-smoke-test")
                 || HasArgument(args, "--settings-smoke-test") || HasArgument(args, "--dom-probe") || HasArgument(args, "--regression-test");
@@ -124,6 +133,11 @@ namespace MiniView.WebView2App
         internal static int Run()
         {
             int failures = 0;
+            failures += Check(DeviceProfile.BuildMobileUserAgent("155.0.2849.68").Contains("Chrome/155.0.0.0 Mobile"), "手机 UA 使用真实内核主版本");
+            failures += Check(DeviceProfile.BrowserMajor("invalid") == 130 && DeviceProfile.BrowserMajor(null) == 130,
+                "异常内核版本使用探针默认值");
+            failures += Check(DeviceProfile.BrowserMajor("0.1") == 130 && DeviceProfile.BrowserMajor("-1.0") == 130,
+                "手机 UA 拒绝非正版本号");
             failures += Check(WindowRules.IsDouyinUrl("https://www.douyin.com/?recommend=1"), "允许抖音 HTTPS");
             failures += Check(WindowRules.IsDouyinUrl("https://live.douyin.com/123"), "允许抖音子域名");
             failures += Check(!WindowRules.IsDouyinUrl("http://www.douyin.com/"), "拒绝非 HTTPS");

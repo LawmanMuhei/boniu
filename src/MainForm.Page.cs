@@ -20,7 +20,11 @@ namespace MiniView.WebView2App
             if (IsTestMode
                 && (string.Equals(e.Uri, "about:blank", StringComparison.OrdinalIgnoreCase)
                     || e.Uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))) { navigationGeneration++; return; }
-            if (!WindowRules.IsDouyinUrl(e.Uri)) e.Cancel = true;
+            if (!WindowRules.IsDouyinUrl(e.Uri))
+            {
+                Diagnostics.Log("navigation blocked: " + e.Uri);
+                e.Cancel = true;
+            }
             else
             {
                 navigationGeneration++;
