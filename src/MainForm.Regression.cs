@@ -28,6 +28,7 @@ namespace MiniView.WebView2App
                 await WaitForPageAsync("window.fixtureReady === true");
                 await RunDeviceProfileRegressionAsync();
                 await RunClarityRegressionAsync();
+                await RunZoomRegressionAsync();
                 AssertRegression(!settings.AutoLandscapeLive && !settings.ShowTrayIcon, "isolated default settings");
                 AssertRegression(await PageIsTrueAsync("!document.getElementById('playing').paused && document.getElementById('manual').paused"), "synthetic video playing; manually paused video preserved");
                 await MeasurePerformanceAsync("synthetic-playing");

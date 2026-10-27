@@ -33,7 +33,9 @@ namespace MiniView.WebView2App
                 await ApplyDeviceProfileAsync();
                 if (isQuitting || IsDisposed) return;
                 core.Settings.IsStatusBarEnabled = false;
-                core.Settings.IsZoomControlEnabled = false;
+                core.Settings.IsZoomControlEnabled = true;
+                webView.ZoomFactorChanged += OnWebViewZoomFactorChanged;
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(ZoomResetScript);
                 core.Settings.AreDevToolsEnabled = false;
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
                 core.PermissionRequested += delegate(object sender, CoreWebView2PermissionRequestedEventArgs e)

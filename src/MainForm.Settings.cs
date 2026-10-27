@@ -38,6 +38,7 @@ namespace MiniView.WebView2App
 
             SettingsCard browsingCard = AddCard("浏览");
             AddStackedRow(browsingCard, "访问模式", siteModePicker, 30);
+            BuildZoomSettings(browsingCard);
             AddInlineRow(browsingCard, "手机版说明", siteModeStatus, null, 0, 0);
             BuildClaritySettings(browsingCard);
             siteModePicker.Font = UiFonts.Caption;
@@ -684,6 +685,9 @@ namespace MiniView.WebView2App
             desktopAutoFitToggle.Checked = settings.DesktopAutoFit;
             desktopAutoFitToggle.Enabled = !mobileSite;
             desktopAutoFitStatus.Text = mobileSite ? "手机版按原始比例显示" : settings.DesktopAutoFit ? "随窗口适配，最低 67%" : "关闭；按页面缩放比例显示";
+            zoomValue.Text = UserZoomPercent + "%";
+            zoomMinusButton.Enabled = UserZoomPercent > 50;
+            zoomPlusButton.Enabled = UserZoomPercent < 200;
             siteModeStatus.Text = "可切视频；仍含电脑布局，登录待验证";
             toolTip.SetToolTip(siteModeStatus, "手机身份下仍可能显示电脑布局；登录、直播与推荐效果待实际账号验收。切换会重载页面。");
             UpdateRecoveryTray();

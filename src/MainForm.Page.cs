@@ -124,8 +124,10 @@ namespace MiniView.WebView2App
 
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            if (isQuitting || IsDisposed || !settings.ImmersiveMode) return;
+            if (isQuitting || IsDisposed) return;
             if (!IsTestMode && !WindowRules.IsDouyinUrl(e.Source)) return;
+            if (HandleZoomMessage(e)) return;
+            if (!settings.ImmersiveMode) return;
             string message;
             try { message = e.TryGetWebMessageAsString(); }
             catch { return; }
