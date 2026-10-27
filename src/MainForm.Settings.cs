@@ -29,12 +29,30 @@ namespace MiniView.WebView2App
             settingsPanel.Controls.Add(headingLabel);
 
             brandLabel.Text = "波妞摸鱼";
+            brandLabel.Text += " v" + AppVersion.Current;
             brandLabel.Font = UiFonts.Caption;
             brandLabel.ForeColor = UiPalette.TextSecondary;
             brandLabel.BackColor = UiPalette.Page;
             brandLabel.AutoSize = true;
             brandLabel.MouseDown += DragWindow;
             settingsPanel.Controls.Add(brandLabel);
+            settingsPanel.Controls.Add(brandIcon);
+            brandIcon.SizeMode = PictureBoxSizeMode.Zoom;
+            using (Icon icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath)) brandIcon.Image = icon.ToBitmap();
+            FormClosed += delegate { if (brandIcon.Image != null) brandIcon.Image.Dispose(); };
+
+            SettingsCard browsingCard = AddCard("浏览");
+            AddStackedRow(browsingCard, "访问模式", siteModePicker, 30);
+            BuildZoomSettings(browsingCard);
+            BuildClaritySettings(browsingCard);
+            siteModePicker.Font = UiFonts.Caption;
+            siteModePicker.AccessibleName = "访问模式";
+            siteModePicker.Items.Add("手机版");
+            siteModePicker.Items.Add("电脑版");
+            siteModePicker.SelectedIndexChanged += async delegate
+            {
+                await ChangeSiteModeAsync(siteModePicker.SelectedIndex == 0 ? SiteMode.Mobile : SiteMode.Desktop);
+            };
 
             SettingsCard hotkeyCard = AddCard("快捷键");
             AddInlineRow(hotkeyCard, "隐藏/显示程序", windowShortcutStatus, windowShortcutButton, 104, 30);
@@ -68,16 +86,15 @@ namespace MiniView.WebView2App
             AddFullWidthRow(interfaceCard, retryPageButton, 36);
             retryPageButton.Click += delegate { ReapplyPageStyles(); };
 
-            SettingsCard dataCard = AddCard("数据");
+            SettingsCard dataCard = AddCard("数据与更新");
             AddInlineRow(dataCard, "本地数据", dataStatus, null, 0, 0);
             AddFullWidthRow(dataCard, openDataButton, 36);
             AddFullWidthRow(dataCard, resetSettingsButton, 36);
             AddFullWidthRow(dataCard, clearDataButton, 36);
             SetDataStatus("登录和设置仅保存在本机");
 
-            SettingsCard updateCard = AddCard("关于与更新");
-            AddInlineRow(updateCard, "当前版本", updateStatus, null, 0, 0);
-            AddFullWidthRow(updateCard, checkUpdateButton, 36);
+            AddInlineRow(dataCard, "当前版本", updateStatus, null, 0, 0);
+            AddFullWidthRow(dataCard, checkUpdateButton, 36);
             updateStatus.Text = "v" + UpdateService.CurrentVersion.ToString(3) + " · 启动时检查更新";
 
             autoHideDelayPicker.Font = UiFonts.Caption;
@@ -180,6 +197,8 @@ namespace MiniView.WebView2App
 
             settingsPanel.Paint += PaintSettingsCards;
             settingsPanel.Resize += delegate { LayoutSettingsPanel(); };
+            cards.Remove(hotkeyCard);
+            cards.Insert(3, hotkeyCard);
         }
 
         private SettingsCard AddCard(string title)
@@ -290,12 +309,13 @@ namespace MiniView.WebView2App
             cardRadius = Math.Max(6, Scaled(12));
             int margin = Scaled(16);
             int cardWidth = Math.Max(1, settingsPanel.ClientSize.Width - margin * 2);
-            rowInset = Math.Min(Scaled(20), Math.Max(8, cardWidth / 10));
+            rowInset = Math.Min(Scaled(14), Math.Max(8, cardWidth / 10));
             int cursor = Scaled(18);
 
             headingLabel.Location = new Point(margin + Scaled(2), cursor);
-            brandLabel.Location = new Point(Math.Max(margin, margin + cardWidth - brandLabel.Width), cursor + Scaled(9));
-            cursor += Scaled(44);
+            brandIcon.SetBounds(margin + Scaled(2), headingLabel.Bottom + Scaled(8), Scaled(16), Scaled(16));
+            brandLabel.Location = new Point(margin + Scaled(24), brandIcon.Top);
+            cursor = Math.Max(brandLabel.Bottom, brandIcon.Bottom) + Scaled(20);
 
             foreach (SettingsCard card in cards)
             {
@@ -327,7 +347,7 @@ namespace MiniView.WebView2App
                     rowCursor += rowRect.Height;
                 }
                 card.Bounds = new Rectangle(margin, top, cardWidth, rowCursor);
-                cursor = top + rowCursor + Scaled(24);
+                cursor = top + rowCursor + Scaled(12);
             }
 
             settingsPanel.ScrollContentHeight = cursor;
@@ -396,7 +416,7 @@ namespace MiniView.WebView2App
             }
         }
 
-        private static void FitLabel(Label label, int maxWidth)
+        private void FitLabel(Label label, int maxWidth)
         {
             // AutoSize=false used to retain a wrapped/default height (23px), spilling into
             // the next row at small window widths. Both title and status are single-line.
@@ -405,6 +425,7 @@ namespace MiniView.WebView2App
             label.AutoSize = false;
             label.AutoEllipsis = true;
             label.Size = new Size(Math.Max(1, Math.Min(Math.Max(1, maxWidth), measured.Width)), measured.Height);
+            toolTip.SetToolTip(label, measured.Width > maxWidth ? label.Text : null);
         }
 
         private void SetDataStatus(string message)
@@ -425,6 +446,10 @@ namespace MiniView.WebView2App
                     new RectangleF(visible.X + 0.5F, visible.Y + 0.5F, visible.Width - 1F, visible.Height - 1F), cardRadius))
                 using (SolidBrush brush = new SolidBrush(UiPalette.Card))
                     e.Graphics.FillPath(brush, path);
+
+                using (GraphicsPath outline = UiPaint.RoundedPath(new RectangleF(visible.X + 0.5F,
+                    visible.Y + 0.5F, visible.Width - 1F, visible.Height - 1F), cardRadius))
+                using (Pen border = new Pen(UiPalette.Separator)) e.Graphics.DrawPath(border, outline);
 
                 using (Pen pen = new Pen(UiPalette.Separator))
                 {
@@ -528,6 +553,8 @@ namespace MiniView.WebView2App
                     if (!FitsInsideCard(card, row.Editor)) return false;
                 }
             }
+            foreach (Control child in zoomEditor.Controls)
+                if (child.Left < 0 || child.Top < 0 || child.Right > zoomEditor.Width || child.Bottom > zoomEditor.Height) return false;
             return true;
         }
 
@@ -551,18 +578,19 @@ namespace MiniView.WebView2App
             button.FaceColor = UiPalette.ButtonFace;
             if (danger)
             {
-                button.HoverFaceColor = Color.FromArgb(74, 40, 40);
-                button.PressedFaceColor = Color.FromArgb(96, 46, 46);
+                button.HoverFaceColor = Color.FromArgb(56, 35, 45);
+                button.PressedFaceColor = Color.FromArgb(62, 37, 43);
             }
             else
             {
-                button.HoverFaceColor = Color.FromArgb(58, 58, 60);
-                button.PressedFaceColor = Color.FromArgb(72, 72, 76);
+                button.HoverFaceColor = UiPalette.ToolbarHover;
+                button.PressedFaceColor = UiPalette.ToolbarPressed;
             }
             button.ForeColor = danger ? UiPalette.Destructive : UiPalette.TextPrimary;
             if (danger) button.BorderColor = UiPalette.Destructive;
             button.Font = UiFonts.Caption;
             button.Cursor = Cursors.Hand;
+            button.TabStop = true;
             return button;
         }
 
@@ -584,7 +612,7 @@ namespace MiniView.WebView2App
             }
         }
 
-        private void ResetApplicationSettings()
+        private async void ResetApplicationSettings()
         {
             if (!ShowConfirmation("确定恢复程序默认设置吗？\r\n\r\n窗口大小、位置、快捷键和显示选项将恢复默认，但不会清除抖音登录。",
                 "恢复默认设置")) return;
@@ -608,6 +636,11 @@ namespace MiniView.WebView2App
             SaveSettingsNow();
             showGraceUntil = DateTime.UtcNow.AddMilliseconds(ShowGraceMilliseconds);
             SetDataStatus("程序设置已恢复默认");
+            if (webViewReady)
+            {
+                try { await ApplyDeviceProfileAsync(); UpdateZoom(); webView.CoreWebView2.Navigate(HomeUrl); }
+                catch (Exception exception) { Diagnostics.LogException("ResetDeviceProfile", exception); ShowTransientNotice("设备配置重置失败，请重新打开程序。"); }
+            }
             UpdateSettingsUi();
         }
 
@@ -625,7 +658,8 @@ namespace MiniView.WebView2App
             try
             {
                 await webView.CoreWebView2.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.AllProfile);
-                webView.CoreWebView2.Navigate(DouyinUrl);
+                mobileHomePending = CurrentSiteMode == SiteMode.Mobile;
+                webView.CoreWebView2.Navigate(HomeUrl);
                 SetDataStatus("登录和网页缓存已清除");
             }
             catch (Exception exception)
@@ -659,6 +693,18 @@ namespace MiniView.WebView2App
 
         private void UpdateSettingsUi()
         {
+            bool mobileSite = CurrentSiteMode == SiteMode.Mobile;
+            siteModePicker.SelectedIndex = mobileSite ? 0 : 1;
+            siteModePicker.Enabled = webViewReady && !deviceProfileChanging;
+            desktopAutoFitToggle.Checked = settings.DesktopAutoFit;
+            desktopAutoFitToggle.Enabled = !mobileSite;
+            desktopAutoFitStatus.Text = mobileSite ? "手机版按原始比例显示" : settings.DesktopAutoFit ? "窄窗时缩小页面，文字会变小" : "关闭；按 100% 清晰显示";
+            zoomValue.Text = UserZoomPercent + "%";
+            clarityToggle.Checked = settings.PreferHighestClarity;
+            clarityStatus.Text = settings.PreferHighestClarity ? "自动选可用的最高档，1080P 需登录" : "关闭；由抖音按网速自动选择";
+            zoomMinusButton.Enabled = UserZoomPercent > 50;
+            zoomPlusButton.Enabled = UserZoomPercent < 200;
+            toolTip.SetToolTip(siteModePicker, "手机版以手机设备身份访问抖音；切换会重新加载页面");
             UpdateRecoveryTray();
             trayToggle.Checked = settings.ShowTrayIcon;
             trayStatus.Text = !windowHotkeyAvailable && IsHandleCreated ? "快捷键不可用时自动保留恢复入口" : settings.ShowTrayIcon ? "双击托盘图标恢复窗口" : "关闭；仍可重新打开程序恢复";
@@ -673,6 +719,8 @@ namespace MiniView.WebView2App
             muteShortcutButton.FaceColor = UiPalette.ShortcutFace;
             immersiveShortcutButton.FaceColor = UiPalette.ShortcutFace;
             miniShortcutButton.FaceColor = UiPalette.ShortcutFace;
+            foreach (RoundedButton shortcut in new[] { windowShortcutButton, chromeShortcutButton,
+                muteShortcutButton, immersiveShortcutButton, miniShortcutButton }) shortcut.BorderColor = Color.Empty;
             windowShortcutStatus.Text = ShortcutStatusText(windowHotkeyAvailable || !IsHandleCreated, windowHotkey);
             chromeShortcutStatus.Text = ShortcutStatusText(chromeHotkeyAvailable || !IsHandleCreated, chromeHotkey);
             muteShortcutStatus.Text = ShortcutStatusText(muteHotkeyAvailable || !IsHandleCreated, muteHotkey);
@@ -711,11 +759,18 @@ namespace MiniView.WebView2App
             topBarStatus.Text = settings.HideTopBar ? "已隐藏" : "已显示";
             rightBarToggle.Checked = settings.HideRightBar;
             rightBarStatus.Text = settings.HideRightBar ? "已隐藏" : "已显示";
+            landscapeToggle.Enabled = leftNavToggle.Enabled = topBarToggle.Enabled = rightBarToggle.Enabled = !mobileSite;
+            if (mobileSite)
+            {
+                liveStatus.Text = "手机版直播布局未验证";
+                leftNavStatus.Text = topBarStatus.Text = rightBarStatus.Text = "仅电脑版可用";
+            }
             toolTip.SetToolTip(immersiveShortcutButton,
                 "进入/退出清爽模式" + FormatShortcut(immersiveHotkey) + "；" + ShortcutHint(immersiveHotkey));
             immersiveToggle.Checked = settings.ImmersiveMode;
             immersiveStatus.Text = pageStyleFallback ? "布局异常，已回退；可点击重新应用" : settings.ImmersiveMode
                 ? "隐藏页面装饰，保留原生播放器" : "已关闭";
+            if (mobileSite) immersiveStatus.Text = "手机版保留原网页；无桌面布局检查";
             miniToggle.Checked = miniMode;
             miniStatus.Text = miniMode ? "已启用；再次点击或按快捷键退出" : "点击开关或按快捷键进入";
             LayoutSettingsPanel();

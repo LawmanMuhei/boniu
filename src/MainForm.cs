@@ -15,7 +15,8 @@ namespace MiniView.WebView2App
 {
     internal sealed partial class MainForm : Form
     {
-        private const string DouyinUrl = "https://www.douyin.com/?recommend=1";
+        private SiteMode CurrentSiteMode { get { return WindowRules.ParseSiteMode(settings.SiteMode); } }
+        private string HomeUrl { get { return WindowRules.GetHomeUrl(CurrentSiteMode); } }
         private const int ToolbarHeight = 36;
         private const int ToolbarButtonWidth = 30;
         private const int ToolbarButtonHeight = 28;
@@ -37,9 +38,10 @@ namespace MiniView.WebView2App
         // 贴边收起后的轮询间隔：常规隐藏用 250ms 保持心跳，但碰边唤出要跟手。
         private const int EdgeDockPollIntervalMilliseconds = 60;
 
-        private readonly VisibilityAwareWebView webView = new VisibilityAwareWebView();
+        private VisibilityAwareWebView webView = new VisibilityAwareWebView();
         private readonly Panel toolbar = new Panel();
         private readonly Panel contentHost = new Panel();
+        private readonly List<int> toolbarSeparators = new List<int>();
         private readonly DarkScrollPanel settingsPanel = new DarkScrollPanel();
         private readonly StatusDot statusDot = new StatusDot();
         private readonly ToolTip toolTip = new ToolTip();
@@ -66,6 +68,7 @@ namespace MiniView.WebView2App
         private readonly RoundedButton miniShortcutButton = CreateShortcutButton();
         private readonly Label headingLabel = new Label();
         private readonly Label brandLabel = new Label();
+        private readonly PictureBox brandIcon = new PictureBox();
         private readonly Label windowShortcutStatus = CreateStatusLabel();
         private readonly Label chromeShortcutStatus = CreateStatusLabel();
         private readonly Label immersiveShortcutStatus = CreateStatusLabel();
@@ -208,8 +211,12 @@ namespace MiniView.WebView2App
             toolbar.MouseDown += DragWindow;
             toolbar.Paint += delegate(object sender, PaintEventArgs e)
             {
-                using (Pen pen = new Pen(UiPalette.ToolbarHover))
+                using (Pen pen = new Pen(UiPalette.Separator))
+                {
                     e.Graphics.DrawLine(pen, 0, toolbar.Height - 1, toolbar.Width, toolbar.Height - 1);
+                    int top = Math.Max(0, (toolbar.Height - Scaled(14)) / 2);
+                    foreach (int x in toolbarSeparators) e.Graphics.DrawLine(pen, x, top, x, top + Scaled(14));
+                }
             };
 
             backButton = CreateToolbarButton("\uE72B", "后退", NavigateBack);
@@ -224,6 +231,7 @@ namespace MiniView.WebView2App
             closeButton.HoverFaceColor = UiPalette.CloseHover;
             closeButton.PressedFaceColor = UiPalette.ClosePressed;
             closeButton.ActiveForeColor = UiPalette.TextPrimary;
+            closeButton.ForeColor = Color.White;
             overflowButton = CreateToolbarButton("\uE712", "更多", ShowOverflowMenu);
             overflowButton.Visible = false;
             overflowMenu = new ContextMenuStrip();
@@ -252,6 +260,8 @@ namespace MiniView.WebView2App
             contentHost.Controls.Add(settingsPanel);
             pageNotice.Visible = false;
             pageNotice.AccessibleName = "页面状态与恢复";
+            pageNotice.CornerRadius = 10;
+            pageNotice.AccentStripe = true;
             pageNotice.Click += delegate
             {
                 if (!string.IsNullOrEmpty(transientNotice)) { ClearTransientNotice(); return; }
@@ -392,11 +402,11 @@ namespace MiniView.WebView2App
             float scale = 1F;
             try
             {
-                using (Graphics graphics = CreateGraphics()) scale = graphics.DpiX / 96F;
+                scale = NativeMethods.GetDpiForWindow(Handle) / 96F;
             }
-            catch
+            catch (EntryPointNotFoundException)
             {
-                scale = 1F;
+                using (Graphics graphics = CreateGraphics()) scale = graphics.DpiX / 96F;
             }
             if (scale < 1F) scale = 1F;
             if (scale > 3F) scale = 3F;
@@ -422,6 +432,20 @@ namespace MiniView.WebView2App
 
         protected override void WndProc(ref Message m)
         {
+            if (m.Msg == NativeMethods.WM_DPICHANGED)
+            {
+                NativeMethods.NativeRectangle suggested = (NativeMethods.NativeRectangle)
+                    System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(NativeMethods.NativeRectangle));
+                SetBoundsProgrammatically(Rectangle.FromLTRB(suggested.Left, suggested.Top, suggested.Right, suggested.Bottom));
+                RefreshUiScale();
+                LayoutWindow();
+                LayoutSettingsPanel();
+                ApplyWindowShape();
+                UpdateZoom();
+                Invalidate(true);
+                m.Result = IntPtr.Zero;
+                return;
+            }
             if (m.Msg == NativeMethods.WM_HOTKEY)
             {
                 int id = m.WParam.ToInt32();
@@ -469,7 +493,7 @@ namespace MiniView.WebView2App
                 if (m.Result.ToInt32() == 1)
                 {
                     Point cursor = PointToClient(Cursor.Position);
-                    int grip = 7;
+                    int grip = Scaled(7);
                     bool left = cursor.X <= grip;
                     bool right = cursor.X >= ClientSize.Width - grip;
                     bool top = cursor.Y <= grip;
@@ -575,11 +599,6 @@ namespace MiniView.WebView2App
             toolTip.SetToolTip(miniButton, (miniMode ? "退出迷你小窗" : "迷你小窗") + FormatShortcut(miniHotkey));
         }
 
-        private void UpdateZoom()
-        {
-            if (webViewReady) webView.ZoomFactor = WindowRules.CalculateZoomFactor(ClientSize.Width);
-        }
-
         private void LayoutWindow()
         {
             Diagnostics.Mark("LayoutWindow enter");
@@ -598,6 +617,7 @@ namespace MiniView.WebView2App
             LayoutToolbarButtons(toolbarHeight);
             settingsPanel.Bounds = contentHost.ClientRectangle;
             pageNotice.SetBounds(Scaled(8), Scaled(8), Math.Max(1, contentHost.Width - Scaled(16)), Scaled(36));
+            pageNotice.CornerRadius = Scaled(10);
             RefreshPageNotice();
             ApplyWindowShape();
             Diagnostics.Mark("LayoutWindow exit tb=" + toolbarHeight + " client=" + ClientSize);
@@ -609,16 +629,24 @@ namespace MiniView.WebView2App
             int buttonWidth = Scaled(ToolbarButtonWidth);
             int buttonHeight = Math.Max(1, Math.Min(Scaled(ToolbarButtonHeight), toolbarHeight));
             int gap = Scaled(ToolbarButtonGap);
-            int radius = Scaled(8);
+            int radius = Scaled(6);
             int right = Math.Max(sidePadding, toolbar.Width - sidePadding);
             int available = right - sidePadding;
             int dotSpace = Scaled(12);
+            int groupGap = Scaled(8);
+            toolbarSeparators.Clear();
+            toolbar.BackColor = ToolbarOverlay ? UiPalette.ToolbarOverlay : UiPalette.Toolbar;
 
             RoundedButton[] all = { backButton, reloadButton, overflowButton, pinButton, muteButton, miniButton, settingsButton, chromeButton, hideButton, closeButton };
-            foreach (RoundedButton button in all) button.CornerRadius = radius;
+            foreach (RoundedButton button in all)
+            {
+                button.CornerRadius = radius;
+                button.BackColor = toolbar.BackColor;
+            }
+            statusDot.BackColor = toolbar.BackColor;
 
             // 窄窗：后退/刷新收纳进「更多」溢出菜单；statusDot 让位，保证顶部留白可拖拽。
-            bool fold = 9 * buttonWidth + 8 * gap + dotSpace > available - Scaled(8);
+            bool fold = 9 * buttonWidth + 6 * gap + dotSpace + groupGap * 2 > available - Scaled(8);
             backButton.Visible = !fold;
             reloadButton.Visible = !fold;
             overflowButton.Visible = fold;
@@ -641,13 +669,27 @@ namespace MiniView.WebView2App
             int x = right;
             for (int i = count - 1; i >= 0; i--)
             {
+                if (!fold && i == 1) break;
                 x -= buttonWidth;
                 visible[i].SetBounds(x, top, buttonWidth, buttonHeight);
-                x -= gap;
+                if (!fold && i == 5)
+                {
+                    toolbarSeparators.Add(x - groupGap / 2);
+                    x -= groupGap;
+                }
+                else x -= gap;
+            }
+            if (!fold)
+            {
+                int left = sidePadding + dotSpace;
+                backButton.SetBounds(left, top, buttonWidth, buttonHeight);
+                reloadButton.SetBounds(left + buttonWidth + gap, top, buttonWidth, buttonHeight);
+                toolbarSeparators.Add(reloadButton.Right + groupGap / 2);
             }
             int dotSize = Scaled(7);
             statusDot.Size = new Size(dotSize, dotSize);
             statusDot.Location = new Point(sidePadding + Scaled(4), (toolbarHeight - dotSize) / 2);
+            toolbar.Invalidate();
         }
 
         private void DragWindow(object sender, MouseEventArgs e)
@@ -714,14 +756,15 @@ namespace MiniView.WebView2App
         {
             RoundedButton button = new RoundedButton();
             button.Text = glyph;
-            button.Font = new Font("Segoe MDL2 Assets", 10F);
+            button.Font = UiFonts.Toolbar;
             button.ForeColor = UiPalette.ToolbarGlyph;
             button.BackColor = UiPalette.Toolbar;
             button.FaceColor = Color.Transparent;
             button.HoverFaceColor = UiPalette.ToolbarHover;
             button.PressedFaceColor = UiPalette.ToolbarPressed;
             button.ActiveFaceColor = UiPalette.ToolbarActive;
-            button.ActiveForeColor = UiPalette.Accent;
+            button.ActiveForeColor = UiPalette.ToolbarActiveGlyph;
+            button.AnimateColors = true;
             button.TabStop = false;
             button.Cursor = Cursors.Hand;
             button.AccessibleName = tooltip;
@@ -738,6 +781,7 @@ namespace MiniView.WebView2App
             button.Font = UiFonts.Caption;
             button.Cursor = Cursors.Hand;
             button.AccessibleRole = AccessibleRole.PushButton;
+            button.TabStop = true;
             return button;
         }
 

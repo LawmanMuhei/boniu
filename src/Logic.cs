@@ -7,6 +7,7 @@ using System.Windows.Forms;
 
 namespace MiniView.WebView2App
 {
+    internal enum SiteMode { Desktop, Mobile }
     /// <summary>窗口贴靠的屏幕边缘。只支持左右两边：上边会和清爽模式的贴顶唤出工具栏抢同一块区域。</summary>
     internal enum EdgeDockSide
     {
@@ -17,6 +18,23 @@ namespace MiniView.WebView2App
 
     internal static class WindowRules
     {
+        internal const string DesktopHomeUrl = "https://www.douyin.com/?recommend=1";
+        internal const string MobileHomeUrl = "https://www.douyin.com/?is_from_mobile_home=1&recommend=1";
+
+        internal static string NormalizeSiteMode(string value)
+        {
+            return value == "Mobile" ? "Mobile" : "Desktop";
+        }
+
+        internal static SiteMode ParseSiteMode(string value)
+        {
+            return NormalizeSiteMode(value) == "Mobile" ? SiteMode.Mobile : SiteMode.Desktop;
+        }
+
+        internal static string GetHomeUrl(SiteMode mode)
+        {
+            return mode == SiteMode.Mobile ? MobileHomeUrl : DesktopHomeUrl;
+        }
         internal static readonly Size DefaultSize = new Size(420, 760);
         internal static readonly Size MiniSize = new Size(340, 600);
         internal const int MiniMinWidth = 260;
@@ -50,8 +68,19 @@ namespace MiniView.WebView2App
         internal static double CalculateZoomFactor(int width)
         {
             int compactWidth = Math.Max(280, width);
-            double factor = Math.Min(1.0, Math.Max(0.44, compactWidth / 726.0));
+            double factor = Math.Min(1.0, Math.Max(0.67, compactWidth / 726.0));
             return Math.Round(factor, 2, MidpointRounding.AwayFromZero);
+        }
+
+        internal static int NormalizeZoomPercent(int percent)
+        {
+            return Math.Max(50, Math.Min(200, percent));
+        }
+
+        internal static double CalculateEffectiveZoom(SiteMode mode, bool desktopAutoFit, int width, int percent)
+        {
+            double fit = mode == SiteMode.Desktop && desktopAutoFit ? CalculateZoomFactor(width) : 1.0;
+            return Math.Max(0.25, Math.Min(5.0, fit * NormalizeZoomPercent(percent) / 100.0));
         }
 
         internal static int NormalizeAutoHideDelay(int value)

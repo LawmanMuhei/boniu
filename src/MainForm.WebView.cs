@@ -28,8 +28,15 @@ namespace MiniView.WebView2App
                 if (isQuitting || IsDisposed) return;
 
                 CoreWebView2 core = webView.CoreWebView2;
+                browserVersion = environment.BrowserVersionString;
+                defaultUserAgent = core.Settings.UserAgent;
+                deviceOverridesApplied = false;
+                await ApplyDeviceProfileAsync();
+                if (isQuitting || IsDisposed) return;
                 core.Settings.IsStatusBarEnabled = false;
-                core.Settings.IsZoomControlEnabled = false;
+                core.Settings.IsZoomControlEnabled = true;
+                webView.ZoomFactorChanged += OnWebViewZoomFactorChanged;
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(ZoomResetScript);
                 core.Settings.AreDevToolsEnabled = false;
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
                 core.PermissionRequested += delegate(object sender, CoreWebView2PermissionRequestedEventArgs e)
@@ -41,6 +48,12 @@ namespace MiniView.WebView2App
                 core.NewWindowRequested += OnNewWindowRequested;
                 core.NavigationStarting += OnNavigationStarting;
                 core.WebMessageReceived += OnWebMessageReceived;
+                core.LaunchingExternalUriScheme += delegate(object sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
+                {
+                    e.Cancel = true;
+                    Diagnostics.Log("external scheme blocked: " + e.Uri);
+                };
+                core.ProcessFailed += OnWebProcessFailed;
                 core.NavigationCompleted += async delegate(object sender, CoreWebView2NavigationCompletedEventArgs e)
                 {
                     if (isQuitting || IsDisposed) return;
@@ -51,15 +64,18 @@ namespace MiniView.WebView2App
                     ApplyMediaState();
                     ApplyPageElementVisibility();
                     await DetectLiveStateAsync();
+                    await InspectDeviceProfileAsync();
                 };
                 core.SourceChanged += async delegate
                 {
                     if (isQuitting || IsDisposed) return;
                     ApplyPageElementVisibility();
                     await DetectLiveStateAsync();
+                    await InspectDeviceProfileAsync();
                 };
                 core.IsMuted = !Visible || settings.Muted;
                 webViewReady = true;
+                UpdateSettingsUi();
                 UpdateZoom();
                 if (Visible) liveTimer.Start();
                 else ArmSuspendTimer(WebViewSuspendDelayMilliseconds);
@@ -105,7 +121,7 @@ namespace MiniView.WebView2App
                     UpdateSettingsUi();
                     Timer exitTimer = new Timer();
                     exitTimer.Interval = 1200;
-                    exitTimer.Tick += delegate
+                    exitTimer.Tick += async delegate
                     {
                         exitTimer.Stop();
                         exitTimer.Dispose();
@@ -136,8 +152,9 @@ namespace MiniView.WebView2App
                                 Directory.CreateDirectory(appFolder);
                                 image.Save(Path.Combine(appFolder, "settings-fixture.png"), System.Drawing.Imaging.ImageFormat.Png);
                             }
+                            await CaptureUiReviewAsync();
                         }
-                        catch (Exception exception) { Console.Error.WriteLine("Settings fixture image: " + exception.Message); }
+                        catch (Exception exception) { Console.Error.WriteLine("Settings fixture image: " + exception.Message); layoutValid = false; }
                         Environment.ExitCode = layoutValid ? 0 : 4;
                         QuitApplication();
                     };
@@ -159,7 +176,8 @@ namespace MiniView.WebView2App
                 }
                 else
                 {
-                    webView.Source = new Uri(DouyinUrl);
+                    mobileHomePending = CurrentSiteMode == SiteMode.Mobile;
+                    webView.Source = new Uri(HomeUrl);
                     if (domProbe)
                     {
                         Timer probeTimer = new Timer();

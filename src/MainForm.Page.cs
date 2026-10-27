@@ -20,7 +20,11 @@ namespace MiniView.WebView2App
             if (IsTestMode
                 && (string.Equals(e.Uri, "about:blank", StringComparison.OrdinalIgnoreCase)
                     || e.Uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))) { navigationGeneration++; return; }
-            if (!WindowRules.IsDouyinUrl(e.Uri)) e.Cancel = true;
+            if (!WindowRules.IsDouyinUrl(e.Uri))
+            {
+                Diagnostics.Log("navigation blocked: " + e.Uri);
+                e.Cancel = true;
+            }
             else
             {
                 navigationGeneration++;
@@ -77,7 +81,7 @@ namespace MiniView.WebView2App
 
         private void ApplyLiveLayout()
         {
-            if (!settings.AutoLandscapeLive || !currentIsLive || liveLandscapeApplied) return;
+            if (CurrentSiteMode == SiteMode.Mobile || !settings.AutoLandscapeLive || !currentIsLive || liveLandscapeApplied) return;
             settings.NormalBounds = BoundsData.FromRectangle(Bounds);
             liveLandscapeApplied = true;
             MinimumSize = new Size(640, 360);
@@ -120,8 +124,10 @@ namespace MiniView.WebView2App
 
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            if (isQuitting || IsDisposed || !settings.ImmersiveMode) return;
+            if (isQuitting || IsDisposed) return;
             if (!IsTestMode && !WindowRules.IsDouyinUrl(e.Source)) return;
+            if (HandleZoomMessage(e)) return;
+            if (!settings.ImmersiveMode) return;
             string message;
             try { message = e.TryGetWebMessageAsString(); }
             catch { return; }
@@ -179,6 +185,15 @@ namespace MiniView.WebView2App
         private void ApplyPageElementVisibility()
         {
             ObserveTask(ApplyPageElementVisibilityAsync(), "ApplyPageElementVisibility");
+            ApplyClarityPreference();
+            if (webViewReady && webView.CoreWebView2 != null && !isQuitting)
+                ObserveTask(webView.ExecuteScriptAsync(PageScripts.NarrowLayoutScript), "ApplyNarrowLayout");
+        }
+
+        private void ApplyClarityPreference()
+        {
+            if (!webViewReady || webView.CoreWebView2 == null || isQuitting) return;
+            ObserveTask(webView.ExecuteScriptAsync(PageScripts.BuildClarity(settings.PreferHighestClarity)), "ApplyClarityPreference");
         }
 
         private async Task ApplyPageElementVisibilityAsync()

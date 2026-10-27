@@ -2,8 +2,63 @@ namespace MiniView.WebView2App
 {
     internal static class PageScripts
     {
+        /// <summary>
+        /// 播放器画质偏好。抖音的「智能」档按播放器尺寸和网速选档，小窗里经常落到 540P。
+        /// 菜单结构实测为 .xgplayer-playclarity-setting > .gear > (.virtual > .item 从高到低, .btn 当前档)，
+        /// 需要登录的档位带 .loginV2 角标。每个播放器每换一次视频源只处理一次，且只在当前仍是「智能」时
+        /// 才改，用户手动选过的档位不覆盖；找不到菜单就什么都不做。
+        /// </summary>
+        internal static string BuildClarity(bool preferHighest)
+        {
+            return @"(function(){
+  window.__boniuClarityPref=" + (preferHighest ? "'highest'" : "'auto'") + @";
+  if(window.__boniuClarityTimer)return;
+  window.__boniuClarityTimer=setInterval(function(){
+    if(window.__boniuClarityPref!=='highest'||document.hidden)return;
+    var gears=document.querySelectorAll('.xgplayer-playclarity-setting');
+    for(var i=0;i<gears.length;i++){
+      var g=gears[i],btn=g.querySelector('.btn');
+      if(!btn||btn.getBoundingClientRect().width===0)continue;
+      var player=g.closest('.xgplayer'),video=player&&player.querySelector('video');
+      var src=video?(video.currentSrc||video.src||''):'';
+      if(g.__boniuClaritySrc===src)continue;
+      var items=g.querySelectorAll('.virtual .item'),best=null;
+      for(var j=0;j<items.length;j++){
+        var text=items[j].textContent.trim();
+        if(text==='智能'||items[j].querySelector('.loginV2')||text.indexOf('登录')>=0)continue;
+        best=items[j];break;
+      }
+      if(!best)continue;
+      g.__boniuClaritySrc=src;
+      if(btn.textContent.trim()==='智能'&&!/selected/.test(best.className))best.click();
+    }
+  },1500);
+})();";
+        }
+
+        /// <summary>
+        /// 抖音电脑版 body 带 min-width:580px。小窗按 100% 显示时视口只有约 370 CSS 像素，右侧互动栏和半个播放器
+        /// 会被裁掉；以前靠把整页缩到 0.6 倍左右塞进去，字小且糊。解除这条限制后页面按窗口宽度重新排版，
+        /// 实测播放器与互动栏完整可见。单独一个 style，不受清爽模式健康守卫回退的影响。
+        /// </summary>
+        internal const string NarrowLayoutScript = @"(function(){
+  if(document.getElementById('__boniuNarrowStyle'))return;
+  var st=document.createElement('style');st.id='__boniuNarrowStyle';
+  st.textContent='html,html body{min-width:0!important;}';
+  (document.head||document.documentElement).appendChild(st);
+})();";
+
         internal static string BuildVisibility(AppSettings settings, long revision)
         {
+            // 探针没有发现需要隐藏的 App 遮罩；手机身份下不套用桌面 CSS 或健康守卫。
+            if (WindowRules.ParseSiteMode(settings.SiteMode) == SiteMode.Mobile)
+                return @"(() => {
+                  const st=document.getElementById('__boniuPageStyle');if(st)st.remove();
+                  if(window.__boniuImmersiveHealthGuard){clearInterval(window.__boniuImmersiveHealthGuard);window.__boniuImmersiveHealthGuard=0;}
+                  const hooks=window.__boniuImmersiveHealthHooks;
+                  if(hooks)hooks.forEach(h=>['scroll','wheel','touchmove'].forEach(e=>removeEventListener(e,h,true)));
+                  window.__boniuImmersiveHealthHooks=0;
+                })()";
             bool hideLeft = settings.HideLeftNav;
             bool hideTop = settings.HideTopBar;
             bool hideRight = settings.HideRightBar;

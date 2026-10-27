@@ -29,6 +29,7 @@ namespace MiniView.WebView2App
             Label status = ShortcutStatusFor(target);
             button.Text = "按下组合键";
             button.FaceColor = UiPalette.ShortcutCapturing;
+            button.BorderColor = UiPalette.Accent;
             status.Text = "正在录入，Esc 取消 · Del 禁用";
             button.Focus();
             outsideSince = null;

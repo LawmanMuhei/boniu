@@ -18,6 +18,23 @@ namespace MiniView.WebView2App
             ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;
             if (HasArgument(args, "--self-test")) return SelfTests.Run();
             if (HasArgument(args, "--update-check-test")) return RunUpdateCheckTest();
+            // 手机网页可行性探针使用独立用户目录，不进入正式窗口或读取现有登录。
+            if (HasArgument(args, "--mobile-probe"))
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                using (MobileProbeForm probe = new MobileProbeForm(GetArgumentValue(args, "--probe-output")))
+                    Application.Run(probe);
+                return Environment.ExitCode;
+            }
+            if (HasArgument(args, "--render-probe"))
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                using (RenderProbeForm probe = new RenderProbeForm(GetArgumentValue(args, "--probe-output")))
+                    Application.Run(probe);
+                return Environment.ExitCode;
+            }
 
             bool testMode = HasArgument(args, "--smoke-test") || HasArgument(args, "--live-smoke-test")
                 || HasArgument(args, "--settings-smoke-test") || HasArgument(args, "--dom-probe") || HasArgument(args, "--regression-test");
@@ -124,14 +141,33 @@ namespace MiniView.WebView2App
         internal static int Run()
         {
             int failures = 0;
+            failures += Check(WindowRules.NormalizeSiteMode("Mobile") == "Mobile" && WindowRules.NormalizeSiteMode("Desktop") == "Desktop", "规范化访问模式");
+            failures += Check(WindowRules.NormalizeSiteMode(null) == "Desktop" && WindowRules.NormalizeSiteMode("other") == "Desktop", "未知访问模式保持电脑版");
+            failures += Check(WindowRules.ParseSiteMode("Mobile") == SiteMode.Mobile && WindowRules.ParseSiteMode("desktop") == SiteMode.Desktop, "业务访问模式使用枚举");
+            failures += Check(WindowRules.GetHomeUrl(SiteMode.Mobile).Contains("is_from_mobile_home=1")
+                && WindowRules.GetHomeUrl(SiteMode.Desktop) == "https://www.douyin.com/?recommend=1", "按访问模式选择首页");
+            failures += Check(new AppSettings().SiteMode == "Desktop", "新旧用户默认保持电脑版");
+            failures += Check(DeviceProfile.BuildMobileUserAgent("155.0.2849.68").Contains("Chrome/155.0.0.0 Mobile"), "手机 UA 使用真实内核主版本");
+            failures += Check(DeviceProfile.BrowserMajor("invalid") == 130 && DeviceProfile.BrowserMajor(null) == 130,
+                "异常内核版本使用探针默认值");
+            failures += Check(DeviceProfile.BrowserMajor("0.1") == 130 && DeviceProfile.BrowserMajor("-1.0") == 130,
+                "手机 UA 拒绝非正版本号");
             failures += Check(WindowRules.IsDouyinUrl("https://www.douyin.com/?recommend=1"), "允许抖音 HTTPS");
             failures += Check(WindowRules.IsDouyinUrl("https://live.douyin.com/123"), "允许抖音子域名");
             failures += Check(!WindowRules.IsDouyinUrl("http://www.douyin.com/"), "拒绝非 HTTPS");
             failures += Check(!WindowRules.IsDouyinUrl("https://douyin.com.example.com/"), "拒绝伪造域名");
             failures += Check(WindowRules.IsLiveUrl("https://live.douyin.com/123"), "识别直播域名");
             failures += Check(WindowRules.IsLiveUrl("https://www.douyin.com/live/123"), "识别直播路径");
-            failures += Check(Math.Abs(WindowRules.CalculateZoomFactor(280) - 0.44) < 0.001, "最小缩放");
+            failures += Check(Math.Abs(WindowRules.CalculateZoomFactor(280) - 0.67) < 0.001, "自适应缩放不低于 67%");
             failures += Check(Math.Abs(WindowRules.CalculateZoomFactor(726) - 1.0) < 0.001, "正常缩放");
+            failures += Check(WindowRules.NormalizeZoomPercent(0) == 50 && WindowRules.NormalizeZoomPercent(300) == 200
+                && WindowRules.NormalizeZoomPercent(110) == 110, "缩放比例限制为 50% 到 200%");
+            failures += Check(Math.Abs(WindowRules.CalculateEffectiveZoom(SiteMode.Mobile, true, 280, 100) - 1) < 0.001, "手机模式不随窗宽缩小页面");
+            failures += Check(Math.Abs(WindowRules.CalculateEffectiveZoom(SiteMode.Desktop, true, 420, 150) - 1.005) < 0.001, "电脑模式适配与用户比例相乘");
+            failures += Check(Math.Abs(WindowRules.CalculateEffectiveZoom(SiteMode.Desktop, false, 280, 150) - 1.5) < 0.001, "关闭电脑自适应保留用户比例");
+            failures += Check(!new AppSettings().DesktopAutoFit && new AppSettings().MobileZoomPercent == 100
+                && new AppSettings().DesktopZoomPercent == 100 && new AppSettings().PreferHighestClarity, "清晰度与缩放的默认设置");
+            failures += Check(PageScripts.BuildClarity(true).Contains("'highest'") && PageScripts.BuildClarity(false).Contains("'auto'"), "画质偏好脚本按设置生成");
             // 清爽模式顶部工具栏迟滞：贴顶 6px 内唤出，离开工具栏区域 44px 才收起，
             // 上甩越过窗口上边缘也算贴顶（10ms 采样会跳过窄带）。
             const int reveal = 6, keep = 44;
