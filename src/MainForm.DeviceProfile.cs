@@ -11,12 +11,13 @@ namespace MiniView.WebView2App
     internal sealed partial class MainForm
     {
         private readonly SegmentedPicker siteModePicker = new SegmentedPicker();
-        private readonly Label siteModeStatus = CreateStatusLabel();
         private string browserVersion;
         private string defaultUserAgent;
         private bool deviceProfileChanging;
         private bool mobileHomePending;
         private bool recoveringWebView;
+        // 是否下发过手机仿真。电脑模式从未切过手机就完全不碰 CDP，保持与 1.10.1 一致的原生身份。
+        private bool deviceOverridesApplied;
         private int lastProfileRepairGeneration = -1;
 
         private Task<string> CallCdpAsync(string method, Dictionary<string, object> arguments)
@@ -41,16 +42,21 @@ namespace MiniView.WebView2App
                 await CallCdpAsync("Emulation.setTouchEmulationEnabled", new Dictionary<string, object> { { "enabled", true }, { "maxTouchPoints", 5 } });
                 // 真实推荐页已支持滚轮和上下键；鼠标转触摸没有切片收益，保留正常鼠标点击。
                 await CallCdpAsync("Emulation.setEmitTouchEventsForMouse", new Dictionary<string, object> { { "enabled", false } });
-                await CallCdpAsync("Emulation.setDeviceMetricsOverride", new Dictionary<string, object> {
-                    { "width", 0 }, { "height", 0 }, { "deviceScaleFactor", 0 }, { "mobile", true } });
+                // 不开 mobile 视口：抖音主站在手机身份下仍给电脑布局，却带 initial-scale=0.5 的 meta viewport，
+                // 开了会把整页按约 0.57 倍缩小渲染，字又小又糊。手机身份由 UA、Client Hints 和触摸信号表达即可。
+                await CallCdpAsync("Emulation.clearDeviceMetricsOverride", new Dictionary<string, object>());
+                deviceOverridesApplied = true;
             }
             else
             {
+                if (!deviceOverridesApplied) return;
                 core.Settings.UserAgent = defaultUserAgent;
                 await CallCdpAsync("Emulation.clearDeviceMetricsOverride", new Dictionary<string, object>());
                 await CallCdpAsync("Emulation.setTouchEmulationEnabled", new Dictionary<string, object> { { "enabled", false } });
                 await CallCdpAsync("Emulation.setEmitTouchEventsForMouse", new Dictionary<string, object> { { "enabled", false } });
-                await CallCdpAsync("Emulation.setUserAgentOverride", new Dictionary<string, object> { { "userAgent", defaultUserAgent } });
+                // 空 UA 等于撤销覆盖；带默认 UA 但不带 metadata 的覆盖会让 Chromium 停发 Sec-CH-UA 请求头。
+                await CallCdpAsync("Emulation.setUserAgentOverride", new Dictionary<string, object> { { "userAgent", "" } });
+                deviceOverridesApplied = false;
             }
         }
 
@@ -170,11 +176,15 @@ namespace MiniView.WebView2App
                 settings.SiteMode = "Mobile";
                 await ApplyDeviceProfileAsync();
                 AssertRegression(await PageIsTrueAsync("navigator.userAgent.includes('Mobile') && navigator.userAgentData.mobile && navigator.maxTouchPoints===5 && matchMedia('(pointer:coarse)').matches"), "mobile device profile signals agree");
+                string mobileWidth = await webView.ExecuteScriptAsync("innerWidth");
                 UpdateSettingsUi();
                 AssertRegression(!leftNavToggle.Enabled && !topBarToggle.Enabled && !rightBarToggle.Enabled && !landscapeToggle.Enabled, "mobile desktop-only controls disabled");
                 settings.SiteMode = "Desktop";
                 await ApplyDeviceProfileAsync();
                 AssertRegression(await PageIsTrueAsync("!navigator.userAgent.includes('Mobile') && !navigator.userAgentData.mobile && navigator.platform==='Win32' && navigator.maxTouchPoints===0 && !matchMedia('(pointer:coarse)').matches"), "desktop device profile restored");
+                AssertRegression(await PageIsTrueAsync("navigator.userAgentData.brands.length>0 && navigator.userAgentData.platform==='Windows'"), "desktop client hints restored");
+                // 手机身份不得改变布局视口：开 mobile 视口时无 meta 的页面会变成 980 宽，带 initial-scale=0.5 的抖音会被缩一半。
+                AssertRegression(await PageIsTrueAsync("innerWidth===" + mobileWidth), "mobile profile leaves viewport unscaled");
             }
             finally { settings.SiteMode = "Desktop"; deviceProfileChanging = false; UpdateZoom(); UpdateSettingsUi(); }
         }

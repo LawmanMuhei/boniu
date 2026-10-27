@@ -44,7 +44,6 @@ namespace MiniView.WebView2App
             SettingsCard browsingCard = AddCard("浏览");
             AddStackedRow(browsingCard, "访问模式", siteModePicker, 30);
             BuildZoomSettings(browsingCard);
-            AddInlineRow(browsingCard, "手机版说明", siteModeStatus, null, 0, 0);
             BuildClaritySettings(browsingCard);
             siteModePicker.Font = UiFonts.Caption;
             siteModePicker.AccessibleName = "访问模式";
@@ -699,12 +698,13 @@ namespace MiniView.WebView2App
             siteModePicker.Enabled = webViewReady && !deviceProfileChanging;
             desktopAutoFitToggle.Checked = settings.DesktopAutoFit;
             desktopAutoFitToggle.Enabled = !mobileSite;
-            desktopAutoFitStatus.Text = mobileSite ? "手机版按原始比例显示" : settings.DesktopAutoFit ? "随窗口适配，最低 67%" : "关闭；按页面缩放比例显示";
+            desktopAutoFitStatus.Text = mobileSite ? "手机版按原始比例显示" : settings.DesktopAutoFit ? "窄窗时缩小页面，文字会变小" : "关闭；按 100% 清晰显示";
             zoomValue.Text = UserZoomPercent + "%";
+            clarityToggle.Checked = settings.PreferHighestClarity;
+            clarityStatus.Text = settings.PreferHighestClarity ? "自动选可用的最高档，1080P 需登录" : "关闭；由抖音按网速自动选择";
             zoomMinusButton.Enabled = UserZoomPercent > 50;
             zoomPlusButton.Enabled = UserZoomPercent < 200;
-            siteModeStatus.Text = "可切视频；仍含电脑布局，登录待验证";
-            toolTip.SetToolTip(siteModeStatus, "手机身份下仍可能显示电脑布局；登录、直播与推荐效果待实际账号验收。切换会重载页面。");
+            toolTip.SetToolTip(siteModePicker, "手机版以手机设备身份访问抖音；切换会重新加载页面");
             UpdateRecoveryTray();
             trayToggle.Checked = settings.ShowTrayIcon;
             trayStatus.Text = !windowHotkeyAvailable && IsHandleCreated ? "快捷键不可用时自动保留恢复入口" : settings.ShowTrayIcon ? "双击托盘图标恢复窗口" : "关闭；仍可重新打开程序恢复";

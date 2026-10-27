@@ -50,3 +50,13 @@ artifacts 按仓库原规则 ignored，仅保留在本地，不随提交上传�
 - [清晰度与 DPI](mcp-clarity-dpi-implementation.md)
 - [网页缩放](mcp-page-zoom-implementation.md)
 - [UI、对比度和截图](mcp-ui-coordination-implementation.md)
+
+## 审查后修正（2026-10-27，Claude）
+
+- **手机身份不再缩小页面**：`setDeviceMetricsOverride` 的 `mobile:true` 会让 Chromium 执行抖音主站的 `initial-scale=0.5` meta viewport，整页约按 0.57 倍渲染。改为手机身份只下发 UA / Client Hints / 触摸信号并清除视口覆盖；回归断言手机与电脑身份下 `innerWidth` 相同。
+- **电脑版保留 Client Hints**：电脑模式从未切过手机时完全不调用 CDP；切回时用空 UA 撤销覆盖（不带 metadata 的覆盖会让 Chromium 停发 `Sec-CH-UA`）。回归断言 `userAgentData.brands` 非空且 `platform==='Windows'`。
+- **缩放回报去重**：`ZoomFactorChanged` 若是程序自己设置的回声（比例不变）则不保存、不弹提示；越界时只把页面写回边界。
+- **清晰度默认值**：`DesktopAutoFit` 默认关闭，电脑版按 100% 显示（420 宽实测布局可用、DPR 恢复真实值）。
+- **新增「优先最高画质」（默认开）**：在真实抖音页面实测菜单结构 `.xgplayer-playclarity-setting > .gear > .virtual > .item`（从高到低，登录档带 `.loginV2`）与 `.btn`（当前档）；程序化点击即生效，换视频后继续生效。脚本每个播放器每个视频源只处理一次，仅在当前为「智能」时切换，跳过需登录档位。未登录实测「智能 → 高清 720P」。合成夹具回归两项（跳过登录档、不覆盖手动选择）。
+- 设置页删除「手机版说明」开发备注行，说明移到访问模式的 tooltip。
+- 验证：版本一致性 1.11.0；x64 与 x86 `scripts\test.ps1` 各 135 项自测、91 项回归通过。登录后 1080P 档位、长时间使用的流量与卡顿未验证。

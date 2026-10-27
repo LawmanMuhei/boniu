@@ -13,6 +13,8 @@ namespace MiniView.WebView2App
     {
         private readonly ToggleSwitch desktopAutoFitToggle = new ToggleSwitch();
         private readonly Label desktopAutoFitStatus = CreateStatusLabel();
+        private readonly ToggleSwitch clarityToggle = new ToggleSwitch();
+        private readonly Label clarityStatus = CreateStatusLabel();
         private readonly Panel zoomEditor = new Panel();
         private readonly RoundedButton zoomMinusButton = CreateSettingsActionButton("−", false);
         private readonly RoundedButton zoomPlusButton = CreateSettingsActionButton("+", false);
@@ -51,6 +53,15 @@ namespace MiniView.WebView2App
 
         private void BuildClaritySettings(SettingsCard card)
         {
+            AddInlineRow(card, "优先最高画质", clarityStatus, clarityToggle, 44, 26);
+            clarityToggle.CheckedChanged += delegate
+            {
+                if (settings.PreferHighestClarity == clarityToggle.Checked) return;
+                settings.PreferHighestClarity = clarityToggle.Checked;
+                ApplyClarityPreference();
+                ScheduleSettingsSave();
+                UpdateSettingsUi();
+            };
             AddInlineRow(card, "电脑版自动适配宽度", desktopAutoFitStatus, desktopAutoFitToggle, 44, 26);
             desktopAutoFitToggle.CheckedChanged += delegate
             {
@@ -134,8 +145,12 @@ namespace MiniView.WebView2App
         private void OnWebViewZoomFactorChanged(object sender, EventArgs e)
         {
             if (applyingZoom || !webViewReady || isQuitting || deviceProfileChanging) return;
-            double userFactor = webView.ZoomFactor / ZoomFitFactor;
-            SetUserZoom((int)Math.Round(userFactor * 100, MidpointRounding.AwayFromZero), true);
+            int percent = (int)Math.Round(webView.ZoomFactor / ZoomFitFactor * 100, MidpointRounding.AwayFromZero);
+            // WebView2 可能异步回报程序自己设置的缩放（例如拖动改窗宽时），比例没变就不保存也不弹提示。
+            if (percent == UserZoomPercent) return;
+            // 超出 50%~200% 时夹回边界；已在边界上就只把页面写回去。
+            if (WindowRules.NormalizeZoomPercent(percent) == UserZoomPercent) { UpdateZoom(); return; }
+            SetUserZoom(percent, true);
         }
 
         private bool HandleZoomMessage(CoreWebView2WebMessageReceivedEventArgs e)
@@ -204,6 +219,25 @@ namespace MiniView.WebView2App
                 settings.DesktopAutoFit = true;
                 UpdateZoom();
                 AssertRegression(webView.ZoomFactor >= 0.67, "desktop fit does not shrink below 67 percent");
+                // 合成一个与抖音实测结构一致的画质菜单：1080P 需登录，应落到 720P；用户手选过的档位不再覆盖。
+                await webView.ExecuteScriptAsync(@"(() => {
+                  const host=document.createElement('div');host.className='xgplayer';host.id='__boniuClarityFixture';
+                  host.innerHTML='<video src=""data:video/mp4;base64,AA""></video><xg-icon class=""xgplayer-playclarity-setting""><div class=""gear""><div class=""virtual"">'
+                    +'<div class=""item""><div class=""clarity-wrapper""><span>高清 1080P</span><span class=""loginV2"">登录即享</span></div></div>'
+                    +'<div class=""item"">高清 720P</div><div class=""item"">标清 540P</div><div class=""item selected"">智能</div></div>'
+                    +'<div class=""btn"" style=""display:inline-block"">智能</div></div></xg-icon>';
+                  document.body.appendChild(host);
+                  host.querySelectorAll('.item').forEach(i=>i.addEventListener('click',()=>{
+                    host.querySelectorAll('.item').forEach(x=>x.classList.remove('selected'));i.classList.add('selected');
+                    host.querySelector('.btn').textContent=i.textContent.trim();}));
+                })()");
+                await webView.ExecuteScriptAsync(PageScripts.BuildClarity(true));
+                await Task.Delay(2000);
+                AssertRegression(await PageIsTrueAsync("document.querySelector('#__boniuClarityFixture .btn').textContent==='高清 720P'"), "highest clarity skips login-only level");
+                await webView.ExecuteScriptAsync("(() => { const f=document.getElementById('__boniuClarityFixture'); f.querySelectorAll('.item')[3].click(); })()");
+                await Task.Delay(2000);
+                AssertRegression(await PageIsTrueAsync("document.querySelector('#__boniuClarityFixture .btn').textContent==='智能'"), "manual clarity choice not overridden");
+                await webView.ExecuteScriptAsync(PageScripts.BuildClarity(false) + ";document.getElementById('__boniuClarityFixture').remove();");
             }
             finally
             {

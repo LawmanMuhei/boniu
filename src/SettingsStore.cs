@@ -51,6 +51,7 @@ namespace MiniView.WebView2App
         public bool DesktopAutoFit { get; set; }
         public int MobileZoomPercent { get; set; }
         public int DesktopZoomPercent { get; set; }
+        public bool PreferHighestClarity { get; set; }
 
         public AppSettings()
         {
@@ -69,8 +70,10 @@ namespace MiniView.WebView2App
             HideRightBar = false;
             ImmersiveMode = false;
             SiteMode = "Desktop";
-            DesktopAutoFit = true;
+            // 自动适配会把整页缩到 67%~100%，devicePixelRatio 随之降低，文字和封面明显发虚；默认按 100% 显示。
+            DesktopAutoFit = false;
             MobileZoomPercent = DesktopZoomPercent = 100;
+            PreferHighestClarity = true;
         }
     }
 

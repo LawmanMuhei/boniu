@@ -30,6 +30,7 @@ namespace MiniView.WebView2App
                 CoreWebView2 core = webView.CoreWebView2;
                 browserVersion = environment.BrowserVersionString;
                 defaultUserAgent = core.Settings.UserAgent;
+                deviceOverridesApplied = false;
                 await ApplyDeviceProfileAsync();
                 if (isQuitting || IsDisposed) return;
                 core.Settings.IsStatusBarEnabled = false;
